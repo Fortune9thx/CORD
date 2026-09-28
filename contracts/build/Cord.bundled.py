@@ -867,6 +867,21 @@ def _err(reason):
     raise gl.vm.UserError(reason)
 
 
+def _to_address(value):
+    """Coerce a constructor argument into an Address, or None if unset.
+
+    Deploy tooling infers argument types from their shape, so a 40-hex treasury
+    can arrive already decoded as an Address rather than as the `str` this
+    parameter is annotated with. Handling both means a deploy cannot revert in
+    the constructor over an encoding detail.
+    """
+    if value is None or value == "":
+        return None
+    if isinstance(value, Address):
+        return value
+    return Address(value)
+
+
 def _guard(fn):
     """Run pure-lib code, translating its CordError into a GenVM user error."""
     try:
@@ -902,9 +917,7 @@ class Cord(gl.contract.Contract):
         fee_bps: int = DEFAULT_FEE_BPS,
     ):
         self.owner = gl.message.sender_address
-        self.treasury = (
-            gl.message.sender_address if not treasury else Address(treasury)
-        )
+        self.treasury = _to_address(treasury) or gl.message.sender_address
         if fee_bps < 0 or fee_bps > BPS_DENOM:
             _err("fee bps out of range")
         if review_bond < 0 or challenge_bond < 0 or use_bond < 0:

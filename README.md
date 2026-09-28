@@ -124,3 +124,8 @@ disagrees, and each side fetching evidence independently.
 ## License
 
 MIT — see [LICENSE](LICENSE). Security policy: [SECURITY.md](SECURITY.md).
+
+## Deploying
+
+Step-by-step PowerShell runbook for Studio Dev and Vercel: [docs/DEPLOY.md](docs/DEPLOY.md).
+An address is recorded only after `eth_getCode` confirms code at it.

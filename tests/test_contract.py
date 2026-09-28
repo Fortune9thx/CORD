@@ -671,3 +671,42 @@ def test_config_is_readable(ctx):
 def test_unknown_grant_reads_as_empty_not_an_error(ctx):
     assert ctx.c.get_grant("nope") == ""
     assert ctx.c.get_review("nope") == ""
+
+
+# --- constructor argument encoding -----------------------------------------
+
+
+def test_treasury_accepts_a_hex_string(gl, cord):
+    """The documented form: treasury passed as a plain hex string."""
+    gl.message.sender_address = gl.types.Address(BOSS)
+    c = cord.Cord(treasury=TREASURY)
+    assert json.loads(c.get_config())["treasury"] == TREASURY.lower()
+
+
+def test_treasury_accepts_an_already_decoded_address(gl, cord):
+    """Deploy tooling may infer a 40-hex argument as an Address, not a str.
+
+    A constructor that only handled `str` would revert at deploy time over an
+    encoding detail, so both forms must work.
+    """
+    gl.message.sender_address = gl.types.Address(BOSS)
+    c = cord.Cord(treasury=gl.types.Address(TREASURY))
+    assert json.loads(c.get_config())["treasury"] == TREASURY.lower()
+
+
+def test_treasury_defaults_to_the_deployer(gl, cord):
+    gl.message.sender_address = gl.types.Address(BOSS)
+    c = cord.Cord()
+    assert json.loads(c.get_config())["treasury"] == BOSS.lower()
+
+
+def test_fee_bps_out_of_range_is_refused_at_deploy(gl, cord):
+    gl.message.sender_address = gl.types.Address(BOSS)
+    with pytest.raises(gl.vm.UserError):
+        cord.Cord(treasury=TREASURY, fee_bps=10_001)
+
+
+def test_negative_bond_is_refused_at_deploy(gl, cord):
+    gl.message.sender_address = gl.types.Address(BOSS)
+    with pytest.raises(gl.vm.UserError):
+        cord.Cord(treasury=TREASURY, review_bond=-1)
