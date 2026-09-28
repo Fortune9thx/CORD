@@ -1,0 +1,48 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  contract:
+    name: Contract — lint, bundle, tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install tooling
+        run: pip install pytest ruff
+
+      - name: Lint
+        run: ruff check contracts tests
+
+      - name: Build the single deployable file
+        run: python3 contracts/build_bundle.py
+
+      - name: Fail if the committed bundle is stale
+        run: |
+          git diff --exit-code -- contracts/build/Cord.bundled.py \
+            || { echo "::error::contracts/build/Cord.bundled.py is out of date; run python3 contracts/build_bundle.py"; exit 1; }
+
+      - name: Tests
+        run: python3 -m pytest tests/ -q
+
+  frontend:
+    name: Frontend — typecheck and build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - run: npm install
+      - run: npm run typecheck
+      - run: npm run build

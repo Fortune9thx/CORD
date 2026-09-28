@@ -1,0 +1,10 @@
+line-length = 100
+target-version = "py311"
+
+exclude = ["contracts/build"]
+
+[lint]
+# F403/F405: the contract uses `from genlayer.types import *`, which is the
+# documented SDK pattern. E402: tests install the fake GenVM before importing
+# the contract, which has to happen after sys.path is set up.
+ignore = ["F403", "F405", "E402"]

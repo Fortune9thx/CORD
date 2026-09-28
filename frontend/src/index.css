@@ -1,0 +1,51 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    -webkit-font-smoothing: antialiased;
+  }
+  body {
+    @apply bg-canvas text-ink font-sans antialiased;
+  }
+}
+
+@layer components {
+  /* The reference's recurring shapes, named once so pages stay declarative. */
+  .card {
+    @apply rounded-card bg-white shadow-card;
+  }
+  .eyebrow {
+    @apply text-[11px] font-bold uppercase tracking-[0.16em] text-brand;
+  }
+  .h-display {
+    @apply text-ink font-extrabold tracking-[-0.03em] leading-[1.06];
+  }
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl px-5 py-3
+           text-[12px] font-bold uppercase tracking-[0.1em] transition
+           disabled:cursor-not-allowed disabled:opacity-50;
+  }
+  .btn-primary {
+    @apply btn bg-brand text-white hover:bg-brand-dark;
+  }
+  .btn-white {
+    @apply btn bg-white text-ink hover:bg-slate-50;
+  }
+  .btn-ghost {
+    @apply btn border border-slate-200 bg-white text-ink hover:border-slate-300;
+  }
+  .field {
+    @apply w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm
+           text-ink placeholder:text-slate-400 outline-none transition
+           focus:border-brand focus:ring-4 focus:ring-brand/10;
+  }
+  .label {
+    @apply mb-2 block text-[11px] font-bold uppercase tracking-[0.12em] text-mute;
+  }
+  .chip-square {
+    @apply grid h-[64px] w-[64px] place-items-center rounded-2xl border
+           border-slate-200/80 bg-white shadow-chip;
+  }
+}
