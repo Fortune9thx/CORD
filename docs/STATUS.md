@@ -10,7 +10,7 @@ _Last verified from the build workspace on 2026-09-28._
 | `Depends` directive | present as byte one, no BOM, asserted by test |
 | Contract classes | exactly one (`Cord`), asserted by test |
 | Unsafe `run_nondet` | absent, asserted by test |
-| Tests | **141 passed** (82 pure logic, 51 contract state machine, 8 bundle gates) |
+| Tests | **146 passed** (82 pure logic, 56 contract state machine, 8 bundle gates) |
 
 ## Network
 

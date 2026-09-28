@@ -19,7 +19,7 @@ chain 61997; state may reset.
 | Explorer | `https://explorer-studio-dev.genlayer.com` |
 | Contract address | **none — not deployed.** See [STATUS.md](STATUS.md) |
 | Live app URL | not deployed from this workspace |
-| Tests | 141 passed — `python3 -m pytest tests/ -q` |
+| Tests | 146 passed — `python3 -m pytest tests/ -q` |
 | Bundle | `contracts/build/Cord.bundled.py`, ~58 KB, one `Contract` class, `Depends` at byte one |
 
 The deploy key exposed to this workspace is a placeholder, not a funded 64-hex
@@ -78,7 +78,7 @@ trapped.
 ## Reviewing this quickly
 
 ```bash
-pip install pytest && python3 -m pytest tests/ -q     # 141 passed
+pip install pytest && python3 -m pytest tests/ -q     # 146 passed
 python3 contracts/build_bundle.py                     # single deployable file
 ```
 

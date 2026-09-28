@@ -101,7 +101,7 @@ contracts/Cord.py            the intelligent contract
 contracts/cordlib/           pure logic — no genlayer import, directly testable
 contracts/build_bundle.py    inlines cordlib into the single deployable file
 contracts/build/             generated single-file bundle
-tests/                       141 tests: pure logic, contract state machine, bundle gates
+tests/                       146 tests: pure logic, contract state machine, bundle gates
 frontend/                    Vite + React + TS + Tailwind app
 docs/                        architecture, audit, status, steward packet
 ```
@@ -111,7 +111,7 @@ docs/                        architecture, audit, status, steward packet
 ```bash
 pip install pytest
 python3 contracts/build_bundle.py     # -> contracts/build/Cord.bundled.py
-python3 -m pytest tests/ -q           # 141 passed
+python3 -m pytest tests/ -q           # 146 passed
 
 cd frontend && npm install && npm run dev
 ```
