@@ -50,7 +50,7 @@ class Address:
         return hash(self._hex)
 
     def __repr__(self):
-        return "Address(%s)" % self._hex
+        return f"Address({self._hex})"
 
 
 # --- ambient chain state ---------------------------------------------------

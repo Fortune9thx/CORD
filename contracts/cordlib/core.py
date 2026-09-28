@@ -147,8 +147,8 @@ def normalize_clause_text(raw):
     # Fold typographic quotes and dashes onto ASCII so a smart-quote swap is
     # not treated as a material revision.
     for a, b in (
-        ("‘", "'"), ("’", "'"), ("“", '"'), ("”", '"'),
-        ("–", "-"), ("—", "-"), (" ", " "),
+        ("\u2018", "'"), ("\u2019", "'"), ("\u201c", '"'), ("\u201d", '"'),
+        ("\u2013", "-"), ("\u2014", "-"), ("\u00a0", " "),
     ):
         t = t.replace(a, b)
     t = t.lower()
@@ -210,9 +210,9 @@ def normalize_clauses(raw_list):
     seen = set()
     for idx, item in enumerate(raw_list):
         if isinstance(item, str):
-            cid, text = "c%d" % idx, item
+            cid, text = f"c{idx}", item
         elif isinstance(item, dict):
-            cid = item.get("id") or ("c%d" % idx)
+            cid = item.get("id") or f"c{idx}"
             text = item.get("text", "")
         else:
             fail("clause must be a string or object")

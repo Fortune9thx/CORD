@@ -22,7 +22,6 @@ enough to reason about in an audit.
 import json
 
 import genlayer as gl
-from genlayer.types import *
 
 # --- begin inlined cordlib (generated; edit contracts/cordlib/*.py) ---
 import hashlib
@@ -179,8 +178,8 @@ def normalize_clause_text(raw):
     # Fold typographic quotes and dashes onto ASCII so a smart-quote swap is
     # not treated as a material revision.
     for a, b in (
-        ("‘", "'"), ("’", "'"), ("“", '"'), ("”", '"'),
-        ("–", "-"), ("—", "-"), (" ", " "),
+        ("\u2018", "'"), ("\u2019", "'"), ("\u201c", '"'), ("\u201d", '"'),
+        ("\u2013", "-"), ("\u2014", "-"), ("\u00a0", " "),
     ):
         t = t.replace(a, b)
     t = t.lower()
@@ -242,9 +241,9 @@ def normalize_clauses(raw_list):
     seen = set()
     for idx, item in enumerate(raw_list):
         if isinstance(item, str):
-            cid, text = "c%d" % idx, item
+            cid, text = f"c{idx}", item
         elif isinstance(item, dict):
-            cid = item.get("id") or ("c%d" % idx)
+            cid = item.get("id") or f"c{idx}"
             text = item.get("text", "")
         else:
             fail("clause must be a string or object")
@@ -752,7 +751,7 @@ def _clause_block(label, clauses):
         return label + ": (none)\n"
     lines = [label + ":"]
     for c in clauses:
-        lines.append("  [%s] %s" % (c["id"], sanitize_untrusted(c["text"], 800)))
+        lines.append(f"  [{c['id']}] {sanitize_untrusted(c['text'], 800)}")
     return "\n".join(lines) + "\n"
 
 
@@ -778,7 +777,7 @@ def build_review_prompt(parent, child):
         "judge silence by whether the child's claimed powers could be exercised "
         "in breach of it.\n\n"
         "=== BEGIN UNTRUSTED PARENT GRANT ===\n"
-        + "capabilities: " + ", ".join(parent["capabilities"]) + "\n"
+         "capabilities: " + ", ".join(parent["capabilities"]) + "\n"
         + "resources: " + ", ".join(parent["resources"]) + "\n"
         + _clause_block("parent clauses", parent["clauses"])
         + "=== END UNTRUSTED PARENT GRANT ===\n\n"
@@ -813,9 +812,9 @@ def build_use_prompt(grant, action, evidence):
     """Prompt for the PROVE_USE judgment."""
     ev_lines = []
     for i, e in enumerate(evidence):
-        ev_lines.append("--- evidence %d ---" % (i + 1))
+        ev_lines.append(f"--- evidence {i + 1} ---")
         ev_lines.append("url: " + e["url"])
-        ev_lines.append("http status: %d" % e["status"])
+        ev_lines.append(f"http status: {e['status']}")
         ev_lines.append("content: " + (e["text"] if e["ok"] else "(could not be retrieved)"))
     ev_block = "\n".join(ev_lines) if ev_lines else "(no evidence retrieved)"
 
@@ -826,7 +825,7 @@ def build_use_prompt(grant, action, evidence):
         "it offered as proof. Judge the action against the grant using the "
         "evidence — not the agent's own characterisation of it.\n\n"
         "=== BEGIN UNTRUSTED GRANT ===\n"
-        + "capabilities: " + ", ".join(grant["capabilities"]) + "\n"
+         "capabilities: " + ", ".join(grant["capabilities"]) + "\n"
         + "resources: " + ", ".join(grant["resources"]) + "\n"
         + _clause_block("clauses", grant["clauses"])
         + "=== END UNTRUSTED GRANT ===\n\n"
@@ -956,7 +955,7 @@ class Cord(gl.contract.Contract):
     def _fresh_id(self, prefix: str) -> str:
         n = int(self.next_id)
         self.next_id = u256(n + 1)
-        return "%s%d" % (prefix, n)
+        return f"{prefix}{n}"
 
     def _effective_status(self, grant: dict) -> str:
         """Status as seen from now — ACTIVE grants past expiry read EXPIRED."""

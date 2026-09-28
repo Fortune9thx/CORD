@@ -22,7 +22,6 @@ enough to reason about in an audit.
 import json
 
 import genlayer as gl
-from genlayer.types import *
 
 # --- cordlib (inlined by contracts/build_bundle.py for deployment) ---------
 from cordlib.core import *
@@ -32,6 +31,8 @@ from cordlib.judgment import (
     normalize_action,
     normalize_evidence,
 )
+from genlayer.types import *
+
 # --- end cordlib ----------------------------------------------------------
 
 DEFAULT_REVIEW_BOND = 10**16       # 0.01 GEN
@@ -133,7 +134,7 @@ class Cord(gl.contract.Contract):
     def _fresh_id(self, prefix: str) -> str:
         n = int(self.next_id)
         self.next_id = u256(n + 1)
-        return "%s%d" % (prefix, n)
+        return f"{prefix}{n}"
 
     def _effective_status(self, grant: dict) -> str:
         """Status as seen from now — ACTIVE grants past expiry read EXPIRED."""

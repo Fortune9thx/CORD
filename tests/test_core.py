@@ -1,7 +1,6 @@
 """Pure-logic tests. No genlayer import is needed to run these."""
 
 import pytest
-
 from cordlib.core import (
     AMBIGUOUS,
     BPS_DENOM,
@@ -43,7 +42,6 @@ from cordlib.core import (
     use_comparable,
     uses_equivalent,
 )
-
 
 # --- token coverage --------------------------------------------------------
 
@@ -101,7 +99,7 @@ def test_clause_ids_must_be_unique():
 
 def test_too_many_clauses_rejected():
     with pytest.raises(CordError):
-        normalize_clauses([{"id": "c%d" % i, "text": "t"} for i in range(9)])
+        normalize_clauses([{"id": f"c{i}", "text": "t"} for i in range(9)])
 
 
 def test_clause_text_length_capped():

@@ -10,10 +10,10 @@ prompt-injection payload cannot get in front of it.
 import re
 
 from .core import (
-    MAX_ACTION_CHARS,
     AMBIGUOUS,
     EXPANDS_AUTHORITY,
     INCONCLUSIVE,
+    MAX_ACTION_CHARS,
     NARROWER_OR_EQUAL,
     OUT_OF_SCOPE,
     WITHIN_SCOPE,
@@ -103,7 +103,7 @@ def _clause_block(label, clauses):
         return label + ": (none)\n"
     lines = [label + ":"]
     for c in clauses:
-        lines.append("  [%s] %s" % (c["id"], sanitize_untrusted(c["text"], 800)))
+        lines.append(f"  [{c['id']}] {sanitize_untrusted(c['text'], 800)}")
     return "\n".join(lines) + "\n"
 
 
@@ -129,7 +129,7 @@ def build_review_prompt(parent, child):
         "judge silence by whether the child's claimed powers could be exercised "
         "in breach of it.\n\n"
         "=== BEGIN UNTRUSTED PARENT GRANT ===\n"
-        + "capabilities: " + ", ".join(parent["capabilities"]) + "\n"
+         "capabilities: " + ", ".join(parent["capabilities"]) + "\n"
         + "resources: " + ", ".join(parent["resources"]) + "\n"
         + _clause_block("parent clauses", parent["clauses"])
         + "=== END UNTRUSTED PARENT GRANT ===\n\n"
@@ -164,9 +164,9 @@ def build_use_prompt(grant, action, evidence):
     """Prompt for the PROVE_USE judgment."""
     ev_lines = []
     for i, e in enumerate(evidence):
-        ev_lines.append("--- evidence %d ---" % (i + 1))
+        ev_lines.append(f"--- evidence {i + 1} ---")
         ev_lines.append("url: " + e["url"])
-        ev_lines.append("http status: %d" % e["status"])
+        ev_lines.append(f"http status: {e['status']}")
         ev_lines.append("content: " + (e["text"] if e["ok"] else "(could not be retrieved)"))
     ev_block = "\n".join(ev_lines) if ev_lines else "(no evidence retrieved)"
 
@@ -177,7 +177,7 @@ def build_use_prompt(grant, action, evidence):
         "it offered as proof. Judge the action against the grant using the "
         "evidence — not the agent's own characterisation of it.\n\n"
         "=== BEGIN UNTRUSTED GRANT ===\n"
-        + "capabilities: " + ", ".join(grant["capabilities"]) + "\n"
+         "capabilities: " + ", ".join(grant["capabilities"]) + "\n"
         + "resources: " + ", ".join(grant["resources"]) + "\n"
         + _clause_block("clauses", grant["clauses"])
         + "=== END UNTRUSTED GRANT ===\n\n"

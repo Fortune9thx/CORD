@@ -41,10 +41,10 @@ def collect_stdlib_imports(texts):
     for t in texts:
         for line in t.splitlines():
             s = line.strip()
-            if (s.startswith("import ") or s.startswith("from ")) and "cordlib" not in s:
-                if s.startswith("from .") or s.startswith("import ."):
+            if s.startswith(("import ", "from ")) and "cordlib" not in s:
+                if s.startswith(("from .", "import .")):
                     continue
-                if s.startswith("from genlayer") or s.startswith("import genlayer"):
+                if s.startswith(("from genlayer", "import genlayer")):
                     continue
                 if s not in found:
                     found.append(s)
@@ -88,7 +88,7 @@ def main():
     assert raw.split(b"\n", 1)[0].decode() == DEPENDS, "Depends line is not first"
     compile(bundled, str(OUT), "exec")
 
-    print("wrote %s (%d bytes, %d lines)" % (OUT, len(raw), len(bundled.splitlines())))
+    print(f"wrote {OUT} ({len(raw)} bytes, {len(bundled.splitlines())} lines)")
     return 0
 
 

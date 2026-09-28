@@ -16,7 +16,7 @@ jobs:
           python-version: "3.11"
 
       - name: Install tooling
-        run: pip install pytest ruff
+        run: pip install pytest "ruff==0.16.9"
 
       - name: Lint
         run: ruff check contracts tests

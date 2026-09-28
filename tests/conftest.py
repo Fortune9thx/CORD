@@ -9,11 +9,11 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "contracts"))
 sys.path.insert(0, str(ROOT / "tests"))
 
-import fake_genlayer  # noqa: E402
+import fake_genlayer
 
 _GL, _CONTROL, _CHAIN = fake_genlayer.install()
 
-import Cord as cord_module  # noqa: E402
+import Cord as cord_module
 
 
 @pytest.fixture
