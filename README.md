@@ -125,6 +125,12 @@ disagrees, and each side fetching evidence independently.
 
 MIT — see [LICENSE](LICENSE). Security policy: [SECURITY.md](SECURITY.md).
 
+## Picking this up in a new session
+
+Start with **[docs/HANDOFF.md](docs/HANDOFF.md)** — current state, the decisions
+that must not be silently reversed, the open questions, and the order to do the
+remaining work in.
+
 ## Deploying
 
 Step-by-step PowerShell runbook for Studio Dev and Vercel: [docs/DEPLOY.md](docs/DEPLOY.md).
