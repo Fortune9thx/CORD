@@ -83,6 +83,23 @@ def _err(reason):
     raise gl.vm.UserError(reason)
 
 
+def _to_account_str(value):
+    """Coerce an address-shaped argument into the lowercase hex string CORD stores.
+
+    Same tooling behaviour `_to_address` handles for the constructor: an
+    argument annotated `str` that looks like a 40-hex address is encoded as an
+    address by the calldata layer and arrives as an `Address`. A live
+    `create_root` reverted with "grantee required" for exactly this reason
+    while every local test passed, because the fake runtime passed plain
+    strings. Accept both, or every address-typed caller is locked out.
+    """
+    if isinstance(value, Address):
+        return value.as_hex.lower()
+    if isinstance(value, str):
+        return value.strip().lower()
+    return ""
+
+
 def _to_address(value):
     """Coerce a constructor argument into an Address, or None if unset.
 
@@ -215,7 +232,8 @@ class Cord(gl.contract.Contract):
         caps = _guard(lambda: normalize_token_set(capabilities, "capabilities", MAX_CAPABILITIES))
         res = _guard(lambda: normalize_token_set(resources, "resources", MAX_RESOURCES))
         cls = _guard(lambda: normalize_clauses(clauses))
-        if not isinstance(grantee, str) or not grantee.strip():
+        grantee = _to_account_str(grantee)
+        if not grantee:
             _err("grantee required")
         if int(expiry) <= self._now():
             _err("expiry must be in the future")
@@ -224,7 +242,7 @@ class Cord(gl.contract.Contract):
         grant = {
             "id": gid,
             "grantor": self._sender(),
-            "grantee": grantee.strip().lower(),
+            "grantee": grantee,
             "parent_id": "",
             "version": 1,
             "depth": 0,
@@ -277,7 +295,8 @@ class Cord(gl.contract.Contract):
         caps = _guard(lambda: normalize_token_set(capabilities, "capabilities", MAX_CAPABILITIES))
         res = _guard(lambda: normalize_token_set(resources, "resources", MAX_RESOURCES))
         cls = _guard(lambda: normalize_clauses(clauses))
-        if not isinstance(grantee, str) or not grantee.strip():
+        grantee = _to_account_str(grantee)
+        if not grantee:
             _err("grantee required")
 
         candidate = {
@@ -303,7 +322,7 @@ class Cord(gl.contract.Contract):
         grant = {
             "id": gid,
             "grantor": self._sender(),
-            "grantee": grantee.strip().lower(),
+            "grantee": grantee,
             "parent_id": parent_id,
             "version": 1,
             "depth": parent["depth"] + 1,
@@ -744,13 +763,14 @@ class Cord(gl.contract.Contract):
         or resource outside scope, a taint, an expiry, or any inactive ancestor.
         """
         allowed, reason = can_invoke(
-            grant_id, actor, capability, resource, self._lookup(), self._now()
+            grant_id, _to_account_str(actor), capability, resource,
+            self._lookup(), self._now()
         )
         return json.dumps({"allowed": allowed, "reason": reason}, sort_keys=True)
 
     @gl.public.view
     def get_claimable(self, addr: str) -> str:
-        return str(int(self.claimable.get(addr.strip().lower(), 0)))
+        return str(int(self.claimable.get(_to_account_str(addr), 0)))
 
     @gl.public.view
     def is_locked(self, fingerprint: str) -> bool:

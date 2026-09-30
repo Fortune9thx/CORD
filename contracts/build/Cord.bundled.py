@@ -767,6 +767,14 @@ def _err(reason):
     raise gl.vm.UserError(reason)
 
 
+def _to_account_str(value):
+    if isinstance(value, Address):
+        return value.as_hex.lower()
+    if isinstance(value, str):
+        return value.strip().lower()
+    return ""
+
+
 def _to_address(value):
     if value is None or value == "":
         return None
@@ -883,7 +891,8 @@ class Cord(gl.contract.Contract):
         caps = _guard(lambda: normalize_token_set(capabilities, "capabilities", MAX_CAPABILITIES))
         res = _guard(lambda: normalize_token_set(resources, "resources", MAX_RESOURCES))
         cls = _guard(lambda: normalize_clauses(clauses))
-        if not isinstance(grantee, str) or not grantee.strip():
+        grantee = _to_account_str(grantee)
+        if not grantee:
             _err("grantee required")
         if int(expiry) <= self._now():
             _err("expiry must be in the future")
@@ -892,7 +901,7 @@ class Cord(gl.contract.Contract):
         grant = {
             "id": gid,
             "grantor": self._sender(),
-            "grantee": grantee.strip().lower(),
+            "grantee": grantee,
             "parent_id": "",
             "version": 1,
             "depth": 0,
@@ -937,7 +946,8 @@ class Cord(gl.contract.Contract):
         caps = _guard(lambda: normalize_token_set(capabilities, "capabilities", MAX_CAPABILITIES))
         res = _guard(lambda: normalize_token_set(resources, "resources", MAX_RESOURCES))
         cls = _guard(lambda: normalize_clauses(clauses))
-        if not isinstance(grantee, str) or not grantee.strip():
+        grantee = _to_account_str(grantee)
+        if not grantee:
             _err("grantee required")
 
         candidate = {
@@ -963,7 +973,7 @@ class Cord(gl.contract.Contract):
         grant = {
             "id": gid,
             "grantor": self._sender(),
-            "grantee": grantee.strip().lower(),
+            "grantee": grantee,
             "parent_id": parent_id,
             "version": 1,
             "depth": parent["depth"] + 1,
@@ -1350,13 +1360,14 @@ class Cord(gl.contract.Contract):
         self, grant_id: str, actor: str, capability: str, resource: str
     ) -> str:
         allowed, reason = can_invoke(
-            grant_id, actor, capability, resource, self._lookup(), self._now()
+            grant_id, _to_account_str(actor), capability, resource,
+            self._lookup(), self._now()
         )
         return json.dumps({"allowed": allowed, "reason": reason}, sort_keys=True)
 
     @gl.public.view
     def get_claimable(self, addr: str) -> str:
-        return str(int(self.claimable.get(addr.strip().lower(), 0)))
+        return str(int(self.claimable.get(_to_account_str(addr), 0)))
 
     @gl.public.view
     def is_locked(self, fingerprint: str) -> bool:

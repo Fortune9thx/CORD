@@ -753,3 +753,36 @@ def test_empty_agreed_value_on_prove_use_is_inconclusive(ctx, monkeypatch):
     uid = ctx.c.prove_use(child, "Paid an invoice", [EV])
     assert ctx.use(uid)["decision"] == INCONCLUSIVE
     assert ctx.claimable(SUB) == 5 * 10**15
+
+
+class TestAddressTypedArguments:
+    """Address-shaped arguments may arrive as Address, not str.
+
+    The calldata layer encodes a bare 40-hex argument as an address even where
+    the signature says `str`. A live create_root reverted with "grantee
+    required" for exactly this reason while the whole suite was green, because
+    the fake runtime only ever passed plain strings.
+    """
+
+    def _addr(self, ctx):
+        return ctx.gl.types.Address(AGENT)
+
+    def test_create_root_accepts_an_address_grantee(self, ctx):
+        gid = ctx.c.create_root(
+            self._addr(ctx), ["read"], ["db:orders"], NOW + 1000, ["Read only."]
+        )
+        grant = json.loads(ctx.c.get_grant(gid))
+        assert grant["grantee"] == AGENT.lower()
+
+    def test_can_invoke_accepts_an_address_actor(self, ctx):
+        gid = ctx.c.create_root(
+            AGENT, ["read"], ["db:orders"], NOW + 1000, ["Read only."]
+        )
+        out = json.loads(ctx.c.can_invoke(gid, self._addr(ctx), "read", "db:orders"))
+        assert out["allowed"] is True
+
+    def test_get_claimable_accepts_an_address(self, ctx):
+        # Seeded directly: a zero balance reads as "0" whether or not the
+        # address is normalised, so it cannot tell the two apart.
+        ctx.c.claimable[AGENT.lower()] = 12345
+        assert ctx.c.get_claimable(self._addr(ctx)) == "12345"
