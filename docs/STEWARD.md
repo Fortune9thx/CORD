@@ -37,21 +37,56 @@ retryable, never authority.
 | | |
 |---|---|
 | Network | GenLayer Studio Dev, chain 61997 |
-| Contract | `0x87a4948504c60a74d65A8Db6592DB79f639c22E0` |
-| Deploy tx | `0x48ce232ad262a9c6af6b55e17aa721c264807a9fd62a821add3e70c3fb25b343` |
+| Contract | `0x0dE4f140aD4Df0D3d24D645A86d4fd8B5769204d` |
+| Deploy tx | `0xafac0b6aadd7e4b5f3764ce932d0f0dec915f40c96f27ebe36d1c508c2890093` |
 | Consensus | `ACCEPTED`, leader execution `SUCCESS` |
-| Bundle | 50,131 bytes, sha256 in [`deploy/deployments.json`](../deploy/deployments.json) |
+| Bundle | 51,116 bytes, sha256 in [`deploy/deployments.json`](../deploy/deployments.json) |
 
-Run against the live contract, not a mock:
+Run against the live contract, not a mock. Full record, including the
+transaction hashes, in [`deploy/deployments.json`](../deploy/deployments.json).
 
-- `gen_getContractSchema` returns all 19 methods
-- `get_config` reads back the constructor state
-- `create_root` wrote grant `g1` with a real chain timestamp
-- `can_invoke` on the active grant → `{"allowed": true}`
-- after `revoke` → `{"allowed": false, "reason": "grant status is revoked"}`
+**Both judgments, and both directions of the one that matters.**
 
-That last flip is the property the design rests on, confirmed against a real
-chain rather than against the test suite's fake runtime.
+| Case | Verdict | Evidence |
+|---|---|---|
+| Child that genuinely narrows its parent | `NARROWER_OR_EQUAL` | `expansion_clause_ids: []`, `prohibitions_covered: true`, grant PROPOSED → ACTIVE |
+| Child that widens its parent in prose only | `EXPANDS_AUTHORITY` | `expansion_clause_ids: ["c0","c1"]`, `prohibitions_covered: false`, grant PROPOSED → **DENIED** |
+| An action proved against a real fetched page | `WITHIN_SCOPE` | validators independently fetched the evidence URL |
+
+The parent forbade reading orders older than 30 days and forbade deleting any
+record. The rejected child claimed both powers back in plain English while
+keeping a strict subset of the structured capabilities, so nothing but the
+prose distinguishes it — and consensus named both offending clauses by id,
+without being told which they were. The same field is empty for the honest
+case, so this is discrimination, not a contract that denies everything.
+
+**The cheap check really does run first.** Proposing a child with a capability
+the parent does not hold reverted with `structural widening rejected:
+capability not covered by parent: admin`, and that transaction's `eq_outputs`
+was `{}` — zero non-deterministic calls. Objective widening never reaches a
+validator, so an attacker cannot burn validator time with obviously invalid
+proposals.
+
+**Authority is walked, never cached.** `can_invoke` on an active child
+returned allowed. After revoking its **root**, the same call returned
+`denied: ancestor g1: grant status is revoked`. The child's own status is
+still ACTIVE — the walk to the root is what denies it, and it says which
+ancestor.
+
+### What is not proven live
+
+`claim()` is the only path that moves GEN out of the contract. The GenLayer
+CLI has no flag for attaching value to a payable call, so posting a real bond
+requires a browser wallet or a raw signing key; neither was used here. The
+verdicts above were therefore produced on a second, identical deployment with
+all bonds set to zero (address in `deployments.json`), which exercises the
+same judgment and settlement code with nothing at stake.
+
+An adverse verdict and the slash it implies are two different milestones. The
+verdicts are proven on chain. The bond economics are proven by the test suite
+and by the settlement records those verdicts wrote, not yet by a balance
+delta. `challenge()`, `revise_child()` and `clear_taint()` have not been run
+on chain.
 
 ## Bonds
 

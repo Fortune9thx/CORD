@@ -76,7 +76,7 @@ is ever accepted from a caller.
 |---|---|
 | RPC | `https://studio-dev.genlayer.com/api` |
 | Explorer | `https://explorer-studio-dev.genlayer.com` |
-| Contract | [`0x87a4948504c60a74d65A8Db6592DB79f639c22E0`](https://explorer-studio-dev.genlayer.com/address/0x87a4948504c60a74d65A8Db6592DB79f639c22E0) |
+| Contract | [`0x0dE4f140aD4Df0D3d24D645A86d4fd8B5769204d`](https://explorer-studio-dev.genlayer.com/address/0x0dE4f140aD4Df0D3d24D645A86d4fd8B5769204d) |
 | Runner | `py-genlayer:5jycge4q8k23462jtb0b9fyey1s9qz928sz2nbrd9mg4sxqg2qng` |
 
 The frontend reads `VITE_CONTRACT_ADDRESS` and shows an explicit banner for
@@ -130,7 +130,7 @@ MIT — see [LICENSE](LICENSE). Security policy: [SECURITY.md](SECURITY.md).
 ## Deployment
 
 Live on GenLayer Studio Dev (chain 61997) at
-[`0x87a4948504c60a74d65A8Db6592DB79f639c22E0`](https://explorer-studio-dev.genlayer.com/address/0x87a4948504c60a74d65A8Db6592DB79f639c22E0).
+[`0x0dE4f140aD4Df0D3d24D645A86d4fd8B5769204d`](https://explorer-studio-dev.genlayer.com/address/0x0dE4f140aD4Df0D3d24D645A86d4fd8B5769204d).
 
 The address, deploy transaction, constructor arguments and the sha256 of the
 exact deployed bundle are recorded in

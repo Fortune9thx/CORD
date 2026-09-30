@@ -150,7 +150,12 @@ export function describeOutcome(receipt: any, requireFinalized = false): TxOutco
 
   // Allow-list. Everything below must match explicitly.
   const execOk = exec === EXEC_OK;
-  const consensusOk = consensus === undefined || CONSENSUS_OK.has(consensus);
+  // A missing consensus result must fail this whitelist like any unknown one.
+  // Written as `consensus === undefined || ...` it skipped itself exactly when
+  // the field was absent, which turns a whitelist back into a blacklist at the
+  // moment it matters. Real receipts on this network do carry result_name --
+  // verified against a live one -- so requiring it costs nothing.
+  const consensusOk = consensus !== undefined && CONSENSUS_OK.has(consensus);
   const statusOk = status !== undefined && TERMINAL_OK.has(status);
   const finalOk = !requireFinalized || status === "FINALIZED";
 

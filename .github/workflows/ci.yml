@@ -16,7 +16,7 @@ jobs:
           python-version: "3.11"
 
       - name: Install tooling
-        run: pip install pytest "ruff==0.16.9"
+        run: pip install pytest "ruff==0.16.9" genvm-linter
 
       - name: Lint
         run: ruff check contracts tests
@@ -32,6 +32,22 @@ jobs:
       - name: Tests
         run: python3 -m pytest tests/ -q
 
+      # `lint` runs the AST safety checks and needs no SDK download. `check`
+      # also validates the schema against the pinned runner tarball, which is
+      # not always fetchable from a cold runner -- so `lint` is the gate and
+      # `check` is advisory. PYTHONIOENCODING or genvm-lint dies writing its
+      # own check mark on a non-UTF-8 console.
+      - name: Contract safety lint
+        env:
+          PYTHONIOENCODING: utf-8
+        run: genvm-lint lint contracts/build/Cord.bundled.py
+
+      - name: Contract schema check (advisory)
+        continue-on-error: true
+        env:
+          PYTHONIOENCODING: utf-8
+        run: genvm-lint check contracts/build/Cord.bundled.py
+
   frontend:
     name: Frontend — typecheck and build
     runs-on: ubuntu-latest
@@ -45,4 +61,5 @@ jobs:
           node-version: "20"
       - run: npm install
       - run: npm run typecheck
+      - run: npm test
       - run: npm run build
