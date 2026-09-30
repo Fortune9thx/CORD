@@ -661,6 +661,28 @@ def test_claim_pays_out_once_and_zeroes_the_balance(ctx):
         ctx.c.claim()
 
 
+def test_the_treasury_can_actually_drain_its_accrued_fees(ctx):
+    """Fees accrue to the treasury on every slash. Something must drain them.
+
+    An accumulating balance with no reachable, tested method that pays it out
+    is a fund-stranding bug, and the treasury is the easiest one to miss: it is
+    credited from a different expression (`self.treasury.as_hex`, which is
+    checksummed) than every other party (already-lowercased stored strings), so
+    it is exactly where a key-normalisation mismatch would hide.
+    """
+    root = make_root(ctx)
+    child = propose(ctx, root)
+    review(ctx, child, EXPANDS)          # slash -> fee to the treasury
+    owed = ctx.claimable(TREASURY)
+    assert owed > 0
+
+    ctx.as_(TREASURY)
+    paid = ctx.c.claim()
+    assert paid == owed
+    assert ctx.chain.sent[-1] == (TREASURY.lower(), owed)
+    assert ctx.claimable(TREASURY) == 0
+
+
 def test_claiming_nothing_is_refused(ctx):
     ctx.as_(OUTSIDER)
     with pytest.raises(ctx.gl.vm.UserError):
