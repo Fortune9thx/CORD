@@ -644,21 +644,22 @@ class Cord(gl.contract.Contract):
         an input to its own opinion only.
         """
 
-        def fetch_all() -> list:
-            out = []
-            for u in urls:
-                try:
-                    resp = gl.nondet.web.get(u)
-                    out.append(normalize_evidence(u, resp.status, resp.body))
-                except Exception:
-                    out.append(normalize_evidence(u, 0, b""))
-            return out
-
         def judge() -> str:
             # Runs on the leader and, independently, inside every validator —
             # so each one fetches the evidence itself. The leader's bytes are
             # an input to the leader's own opinion and nothing more.
-            evidence = fetch_all()
+            #
+            # The fetch loop is inlined rather than factored into a helper:
+            # genvm-lint only follows gl.nondet.* calls made directly inside
+            # the function handed to the equivalence principle, and rejects
+            # the contract when they sit one closure hop away.
+            evidence = []
+            for u in urls:
+                try:
+                    resp = gl.nondet.web.get(u)
+                    evidence.append(normalize_evidence(u, resp.status, resp.body))
+                except Exception:
+                    evidence.append(normalize_evidence(u, 0, b""))
             raw = gl.nondet.exec_prompt(
                 build_use_prompt(grant, action, evidence), response_format="json"
             )

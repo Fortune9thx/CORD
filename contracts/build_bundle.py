@@ -130,7 +130,9 @@ def main():
     bundled = strip_docstrings(bundled)
 
     OUT.parent.mkdir(parents=True, exist_ok=True)
-    OUT.write_text(bundled, encoding="utf-8")
+    # newline="" disables platform newline translation. Without it, Windows
+    # writes CRLF and the deployable no longer matches what CI built.
+    OUT.write_text(bundled, encoding="utf-8", newline="")
 
     raw = OUT.read_bytes()
     assert not raw.startswith(b"\xef\xbb\xbf"), "BOM in bundled output"

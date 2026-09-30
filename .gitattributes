@@ -1,0 +1,7 @@
+# The deploy bundle is built by byte-exact assertions over contracts/Cord.py
+# (the `# { "Depends": ... }` line must be the first line, exactly). A CRLF
+# checkout on Windows breaks the build and would ship a CRLF deployable.
+* text=auto eol=lf
+*.png binary
+*.jpg binary
+*.ico binary
