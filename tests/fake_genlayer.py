@@ -11,6 +11,7 @@ called independently by each side — so consensus failure and evidence
 re-fetching are exercised rather than assumed.
 """
 
+import datetime as _dt
 import sys
 import types
 
@@ -61,8 +62,10 @@ class _Message:
     value = 0
 
 
-class _Block:
-    timestamp = 1_700_000_000
+class _Clock:
+    """Stands in for gl.vm.get_timestamp(), which returns a datetime."""
+
+    now = 1_700_000_000
 
 
 class _Chain:
@@ -71,7 +74,7 @@ class _Chain:
     def __init__(self):
         self.sent = []
 
-    def send_value(self, to, amount):
+    def emit_transfer_from(self, to, amount):
         self.sent.append((to.as_hex, int(amount)))
 
 
@@ -164,6 +167,8 @@ def _make_modules():
     # vm
     vm_mod = types.ModuleType("genlayer.vm")
     vm_mod.UserError = UserError
+    vm_mod.get_timestamp = lambda: _dt.datetime.fromtimestamp(
+        _Clock.now, tz=_dt.UTC)
 
     def run_nondet_default(leader_fn, validator_fn):
         if control.force_exception:
@@ -232,17 +237,38 @@ def _make_modules():
 
     # evm
     evm_mod = types.ModuleType("genlayer.evm")
-    evm_mod.send_value = chain.send_value
+
+    # chain.Account(addr).emit_transfer(value) is how value actually leaves a
+    # contract; there is no gl.evm.send_value.
+    chain_mod = types.ModuleType("genlayer.chain")
+
+    class _Account:
+        def __init__(self, address):
+            self.address = address
+
+        def emit_transfer(self, value, *, on="finalized"):
+            chain.emit_transfer_from(self.address, value)
+
+    chain_mod.Account = _Account
 
     # types
+    # Mirrors the real genlayer.types, which was verified against the live v0.3
+    # runner: it carries Address and the scalars and NOT TreeMap. TreeMap lives
+    # in genlayer.storage. An earlier version of this harness invented
+    # genlayer.types.TreeMap, genlayer.evm.send_value and gl.block.timestamp --
+    # none of which exist -- so the whole suite passed against a deployable the
+    # real VM could not import. Do not add a name here without checking the VM.
     types_mod = types.ModuleType("genlayer.types")
-    types_mod.TreeMap = TreeMap
     types_mod.Address = Address
     types_mod.u256 = u256
     types_mod.u8 = int
     types_mod.u32 = int
     types_mod.bigint = int
-    types_mod.__all__ = ["TreeMap", "Address", "u256", "u8", "u32", "bigint"]
+    types_mod.__all__ = ["Address", "u256", "u8", "u32", "bigint"]
+
+    storage_mod = types.ModuleType("genlayer.storage")
+    storage_mod.TreeMap = TreeMap
+    storage_mod.__all__ = ["TreeMap"]
 
     gl.contract = contract_mod
     gl.public = public
@@ -251,18 +277,22 @@ def _make_modules():
     gl.nondet = nondet_mod
     gl.evm = evm_mod
     gl.types = types_mod
+    gl.storage = storage_mod
+    gl.chain = chain_mod
     gl.message = _Message
-    gl.block = _Block
 
-    return gl, types_mod, contract_mod, vm_mod, nondet_mod, evm_mod, eq_mod, control, chain
+    return (gl, types_mod, storage_mod, chain_mod, contract_mod, vm_mod,
+            nondet_mod, evm_mod, eq_mod, control, chain)
 
 
 def install():
     """Register the fake modules in sys.modules and return the test controls."""
-    (gl, types_mod, contract_mod, vm_mod, nondet_mod,
-     evm_mod, eq_mod, control, chain) = _make_modules()
+    (gl, types_mod, storage_mod, chain_mod, contract_mod, vm_mod,
+     nondet_mod, evm_mod, eq_mod, control, chain) = _make_modules()
     sys.modules["genlayer"] = gl
     sys.modules["genlayer.types"] = types_mod
+    sys.modules["genlayer.storage"] = storage_mod
+    sys.modules["genlayer.chain"] = chain_mod
     sys.modules["genlayer.contract"] = contract_mod
     sys.modules["genlayer.vm"] = vm_mod
     sys.modules["genlayer.nondet"] = nondet_mod

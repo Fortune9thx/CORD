@@ -134,6 +134,23 @@ def main():
     # writes CRLF and the deployable no longer matches what CI built.
     OUT.write_text(bundled, encoding="utf-8", newline="")
 
+    # Every import the contract makes outside the splice region must survive
+    # into the deployable. The splice silently swallowed `from genlayer.types
+    # import *` once -- isort had sorted it in among the cordlib imports -- and
+    # the fake test runtime supplies those names itself, so all 156 tests and
+    # both linters stayed green while the artifact could not be imported at all.
+    # Scanned over the WHOLE source, not just outside the markers: the import
+    # that went missing had drifted INSIDE the splice region, so a check that
+    # only looked outside it would not have caught the very bug it exists for.
+    for region in (contract,):
+        for line in region.splitlines():
+            stripped = line.strip()
+            if not stripped.startswith(("import ", "from ")):
+                continue
+            if stripped.startswith(("from cordlib", "import cordlib")):
+                continue
+            assert stripped in bundled, f"bundler dropped a required import: {stripped}"
+
     raw = OUT.read_bytes()
     assert not raw.startswith(b"\xef\xbb\xbf"), "BOM in bundled output"
     assert raw.split(b"\n", 1)[0].decode() == DEPENDS, "Depends line is not first"

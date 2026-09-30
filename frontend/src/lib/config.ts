@@ -8,7 +8,7 @@ export const CHAIN_ID = Number(import.meta.env.VITE_GENLAYER_CHAIN_ID ?? 61997);
 export const EXPLORER =
   import.meta.env.VITE_EXPLORER ?? "https://explorer-studio-dev.genlayer.com";
 
-/** Empty until a deploy is confirmed by eth_getCode. Never guessed. */
+/** Empty until a deploy is confirmed by gen_getContractSchema. Never guessed. */
 export const CONTRACT_ADDRESS = (
   import.meta.env.VITE_CONTRACT_ADDRESS ?? ""
 ).trim();

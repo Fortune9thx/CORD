@@ -38,13 +38,19 @@ NEARER = NOW + 10 * 86_400
 # --- harness helpers -------------------------------------------------------
 
 
+def _set_now(gl, ts):
+    """Move the fake chain clock. The contract reads gl.vm.get_timestamp()."""
+    import datetime as dt
+    gl.vm.get_timestamp = lambda: dt.datetime.fromtimestamp(ts, tz=dt.UTC)
+
+
 @pytest.fixture
 def ctx(gl, nondet, chain, cord):
     """A deployed Cord plus the knobs to drive it."""
 
     class Ctx:
         def __init__(self):
-            gl.block.timestamp = NOW
+            _set_now(gl, NOW)
             self.gl = gl
             self.nondet = nondet
             self.chain = chain
@@ -57,7 +63,7 @@ def ctx(gl, nondet, chain, cord):
             return self
 
         def at(self, ts):
-            gl.block.timestamp = ts
+            _set_now(gl, ts)
             return self
 
         def answer(self, payload, validator=None):

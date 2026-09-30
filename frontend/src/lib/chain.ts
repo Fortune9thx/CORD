@@ -46,14 +46,25 @@ export async function checkHealth(): Promise<Health> {
   const found = Number.parseInt(chainHex, 16);
   if (!isTargetChain(found)) return { state: "wrong-chain", found };
 
+  // Liveness is probed with gen_getContractSchema, NOT eth_getCode.
+  // eth_getCode returns "0x" for a GenLayer contract that is demonstrably
+  // live -- verified against a known-live address on this chain. Using it
+  // here reports every healthy deployment as "no-code" forever.
   try {
-    const code = await rpc<string>("eth_getCode", [CONTRACT_ADDRESS, "latest"]);
-    // Studio Dev resets wipe state; an address with no code is not live.
-    if (!code || code === "0x" || code === "0x0") {
+    const schema = await rpc<unknown>("gen_getContractSchema", [CONTRACT_ADDRESS]);
+    // Studio Dev resets wipe state; no schema at the address means not live.
+    const methods = (schema as { methods?: Record<string, unknown> } | null)?.methods;
+    if (!schema || !methods || Object.keys(methods).length === 0) {
       return { state: "no-code", address: CONTRACT_ADDRESS };
     }
   } catch (e) {
-    return { state: "rpc-down", detail: e instanceof Error ? e.message : "unreachable" };
+    const msg = e instanceof Error ? e.message : "unreachable";
+    // A contract that is not there answers with an execution/lookup error
+    // rather than a transport failure; that is "no-code", not "rpc-down".
+    if (/not found|does not exist|invalid_contract|execution failed/i.test(msg)) {
+      return { state: "no-code", address: CONTRACT_ADDRESS };
+    }
+    return { state: "rpc-down", detail: msg };
   }
 
   return { state: "live", address: CONTRACT_ADDRESS };

@@ -4,6 +4,16 @@ import json
 
 import genlayer as gl
 
+# isort: off
+# These two MUST stay above the cordlib marker below. The bundler replaces
+# everything between the markers with inlined cordlib source, so an SDK import
+# that drifts inside the block is silently deleted from the deployable while
+# every local test keeps passing against the fake runtime. That happened.
+# TreeMap lives in genlayer.storage; genlayer.types has the scalars and Address.
+from genlayer.storage import TreeMap
+from genlayer.types import *
+# isort: on
+
 # --- begin inlined cordlib (generated; edit contracts/cordlib/*.py) ---
 import hashlib
 import json
@@ -815,7 +825,9 @@ class Cord(gl.contract.Contract):
     # ------------------------------------------------------------------
 
     def _now(self) -> int:
-        return int(gl.block.timestamp)
+        # There is no gl.block in the v0.3 runner -- verified against the live
+        # VM, not the docs. gl.vm.get_timestamp() returns a datetime.
+        return int(gl.vm.get_timestamp().timestamp())
 
     def _sender(self) -> str:
         return gl.message.sender_address.as_hex.lower()
@@ -1222,7 +1234,7 @@ class Cord(gl.contract.Contract):
         if amount <= 0:
             _err("nothing to claim")
         self.claimable[key] = u256(0)
-        gl.evm.send_value(gl.message.sender_address, amount)
+        gl.chain.Account(gl.message.sender_address).emit_transfer(u256(amount))
         return amount
 
     # ------------------------------------------------------------------
