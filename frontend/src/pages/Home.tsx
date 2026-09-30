@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 
 import { CtaBand, Eyebrow, Plus, Seal, Section } from "../components/ui";
+import { GENLAYER_JUDGMENTS, MAX_DELEGATION_DEPTH, TEST_COUNT } from "../lib/stats";
 
 export default function Home() {
   return (
@@ -57,9 +58,9 @@ function Hero() {
 
             <dl className="mt-10 grid max-w-md grid-cols-3 gap-6 border-t border-slate-100 pt-7">
               {[
-                ["8", "max delegation depth"],
-                ["2", "GenLayer judgments"],
-                ["141", "tests passing"],
+                [String(MAX_DELEGATION_DEPTH), "max delegation depth"],
+                [String(GENLAYER_JUDGMENTS), "GenLayer judgments"],
+                [String(TEST_COUNT), "tests passing"],
               ].map(([n, label]) => (
                 <div key={label}>
                   <dt className="text-[28px] font-extrabold tracking-[-0.02em] text-ink">{n}</dt>

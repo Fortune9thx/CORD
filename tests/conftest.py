@@ -38,3 +38,12 @@ def chain():
 @pytest.fixture
 def cord():
     return cord_module
+
+
+def pytest_collection_modifyitems(session, config, items):
+    """Record how many tests this run collected.
+
+    test_frontend_stats.py checks the landing page's "tests passing" figure
+    against this, so the number on the site cannot drift from the suite.
+    """
+    config.cord_collected_count = len(items)
