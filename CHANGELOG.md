@@ -2,6 +2,65 @@
 
 All notable changes to CORD. Dates are UTC.
 
+## [1.0.0] — 2026-09-30
+
+First deployment. Live on GenLayer Studio Dev (chain 61997) at
+`0x0dE4f140aD4Df0D3d24D645A86d4fd8B5769204d`; the address, deploy transaction
+and the sha256 of the deployed bundle are in `deploy/deployments.json`.
+
+### Fixed — deploy blockers found against the live runner
+
+Each of these was invisible to the test suite, both linters and CI, because
+`tests/fake_genlayer.py` supplied the APIs the contract assumed rather than the
+ones the runner has. All were established by probing the live VM.
+
+- The bundler silently dropped `from genlayer.types import *`. isort had sorted
+  it inside the region the bundler replaces wholesale, so the deployable had no
+  `Address` and no `u256` and could not be imported at all. `build_bundle.py`
+  now asserts every non-library import in the source survives into the bundle.
+- `TreeMap` is imported from `genlayer.storage`, not `genlayer.types`.
+- `gl.block` does not exist and `gl.vm.get_timestamp()` raises on chain. Time
+  is read from `gl.message.datetime`, which is also the better source: it is
+  part of the message, so every validator sees the identical value.
+- Value leaves through `gl.chain.Account(addr).emit_transfer(...)`;
+  `gl.evm.send_value` does not exist.
+- `grantee`, `can_invoke`'s `actor` and `get_claimable`'s `addr` rejected
+  address-typed arguments, which is how the calldata layer encodes a bare hex
+  token — locking out every such caller with CORD's own "grantee required".
+- The bundler wrote its output with platform newline translation, so it could
+  never produce a valid deployable on Windows. Added `.gitattributes`.
+
+### Fixed — security
+
+- Evidence URLs accepted three loopback encodings `inet_aton` resolves:
+  `127.1`, `0177.0.0.1` and `0x7f.0x0.0x0.0x1`. The host's last label must now
+  look like a real public suffix, which closes the family rather than chasing
+  encodings.
+- `sanitize_untrusted` stripped backticks while the prompt's fence is
+  `=== BEGIN/END UNTRUSTED ... ===` — it was defending a delimiter the prompt
+  never uses, so quoted text could forge a closing marker. Runs of `=` are now
+  collapsed.
+- `capabilities` and `resources` reached the prompt unsanitized while clauses,
+  the action and fetched evidence did not.
+
+### Fixed — frontend
+
+- The app rendered a blank page: an `async`-shaped `useEffect` returned a value
+  React took as a cleanup function, unmounting the whole tree. Added an error
+  boundary so a render throw can never again be indistinguishable from a dead
+  deployment.
+- Liveness was probed with `eth_getCode`, which returns `0x` for a GenLayer
+  contract that is demonstrably live. It now uses `gen_getContractSchema`.
+- The transaction classifier's consensus check skipped itself when the field
+  was absent, turning a whitelist back into a blacklist. It now has its own
+  test suite, built from a receipt copied off a real transaction.
+
+### Added
+
+- `deploy/deployments.json` — address, deploy transaction, bundle sha256, and
+  the live checks run against it, including what is *not* proven.
+- CI now runs `genvm-lint lint` as a gate and the frontend tests.
+
 ## [Unreleased]
 
 ### Changed — consensus reconciliation

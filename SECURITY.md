@@ -52,6 +52,16 @@ can fail silently with no recovery path. **Use CORD only from directly signed
 transactions by externally owned accounts.** This is a hard requirement that
 cannot be enforced in code.
 
+**Evidence hosts are checked by syntax, not by resolution.** A caller-supplied
+evidence URL must be plain public HTTPS: no credentials, no non-default port,
+and no host that is a loopback, private or link-local address in any encoding
+that `inet_aton` accepts — the dotted quad, the packed decimal, and the
+two-part, octal and hex-dotted forms are all rejected, and the host's last
+label must look like a real public suffix. What syntax cannot catch is a
+perfectly ordinary public hostname whose DNS record points at a private
+address. Every validator resolves and fetches independently, so treat the
+network those validators run on as the real boundary.
+
 **Grants are public.** Everything stored is on-chain and world-readable. Clause
 text must not carry secrets.
 
