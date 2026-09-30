@@ -184,8 +184,11 @@ def test_proposal_starts_inactive(ctx):
 
 def test_only_the_grantee_may_delegate(ctx):
     root = make_root(ctx)
+    before = ctx.c.get_children(root)
     with pytest.raises(ctx.gl.vm.UserError):
         propose(ctx, root, sender=OUTSIDER)
+    # The revert alone is not proof: confirm no child was actually created.
+    assert ctx.c.get_children(root) == before
 
 
 def test_capability_widening_rejected_without_consulting_validators(ctx):
@@ -373,9 +376,12 @@ def test_only_the_grantor_may_request_review(ctx):
     root = make_root(ctx)
     child = propose(ctx, root)
     ctx.answer(NARROWER)
+    before = ctx.c.get_grant(child)
     ctx.as_(OUTSIDER, value=10**16)
     with pytest.raises(ctx.gl.vm.UserError):
         ctx.c.request_review(child)
+    # Still PROPOSED, not silently settled by the wrong caller.
+    assert ctx.c.get_grant(child) == before
 
 
 def test_an_active_grant_cannot_be_reviewed_again(ctx):
@@ -543,9 +549,12 @@ def test_only_the_grantee_may_prove_a_use(ctx):
     _, child = active_child(ctx)
     ctx.nondet.web[EV] = (200, b"x")
     ctx.answer(WITHIN)
+    before = ctx.c.get_uses(child)
     ctx.as_(OUTSIDER)
     with pytest.raises(ctx.gl.vm.UserError):
         ctx.c.prove_use(child, "x", [EV])
+    # No use record was created by the unauthorized attempt.
+    assert ctx.c.get_uses(child) == before
 
 
 def test_cannot_prove_a_use_under_a_revoked_chain(ctx):

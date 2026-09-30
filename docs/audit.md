@@ -9,6 +9,7 @@ Where the value is, what could go wrong, and what stops it.
 | `msg.sender` | trusted | the only basis for authorization |
 | stored grant text | **untrusted** | fenced as data in every prompt |
 | `action` in `prove_use` | **untrusted** | fenced, length-capped |
+| capabilities / resources | **untrusted** | fenced, length-capped, same sanitizer as clause text |
 | fetched page content | **untrusted** | scripts/styles dropped, markup stripped, fenced, truncated |
 | model output | **untrusted** | canonicalized; unrecognized → fails closed |
 | caller-supplied verdicts | **rejected** | no entry point accepts one |
@@ -24,15 +25,42 @@ and `test_revision_to_the_same_text_still_hits_the_lock`.
 **Prompt injection in clause or page text.** Text that instructs the judge to
 return `NARROWER_OR_EQUAL` or `WITHIN_SCOPE`.
 *Addressed:* defence in depth — fenced blocks, the controlling instruction placed
-after the data, backtick and control-character stripping, and a canonicalizer
-that downgrades any verdict inconsistent with the clauses it names. Covered by
-`test_use_prompt_fences_hostile_page_content`.
+after the data, and a canonicalizer that downgrades any verdict inconsistent
+with the clauses it names. Covered by `test_use_prompt_fences_hostile_page_content`.
 
-**SSRF through evidence URLs.** Pointing validators at `169.254.169.254` or an
-internal host.
-*Addressed:* allowlist rejects non-HTTPS, credentials in the authority,
-non-default ports, and loopback / private / link-local hosts, and requires a
-dotted public domain. Covered by `test_hostile_evidence_urls_rejected`.
+**Forging a fence close.** The prompt's own block delimiter is a run of `=`
+(`=== BEGIN/END UNTRUSTED ... ===`). An earlier version of the sanitizer
+stripped only backticks and control characters while its docstring claimed
+that stopped text closing its fence — it was defending a delimiter this
+prompt never uses, so any clause, action description or fetched page
+containing its own `===` run could forge a closing marker and have whatever
+followed it read as instruction rather than quoted data.
+*Addressed:* runs of `=` are collapsed before the text is embedded. Covered by
+`test_sanitizer_cannot_be_used_to_forge_a_fence_close`.
+
+**Unsanitized capability/resource tokens.** Clauses, the action and fetched
+evidence were all sanitized before reaching a prompt; `capabilities` and
+`resources` were joined in raw — 32 tokens × 128 chars of attacker-controlled
+text per grant, on both the parent and child sides of every review.
+*Addressed:* tokens go through the same sanitizer as clause text. Covered by
+`test_capability_and_resource_tokens_are_sanitized_into_the_prompt`.
+
+**SSRF through evidence URLs.** Pointing validators at `169.254.169.254`, an
+internal host, or a loopback address written to slip past a naive filter.
+*Addressed:* the allowlist rejects non-HTTPS, credentials in the authority,
+non-default ports, the canonical loopback/private/link-local dotted forms, and
+requires the host's last label to look like a real public suffix — every real
+TLD begins with a letter, including punycode, and no packed-IP encoding can
+satisfy that. This closes the whole family (`127.1`, `0177.0.0.1`,
+`0x7f.0x0.0x0.0x1` all resolve to loopback via `inet_aton` and were each
+individually accepted by an earlier, narrower version of this filter — found
+by running the validator against them, not by reading it) without enumerating
+encodings one at a time. What it cannot catch: an ordinary public hostname
+whose DNS record resolves to a private address. Every validator resolves and
+fetches independently, so the network those validators run on is the real
+boundary for that case, disclosed in SECURITY.md. Covered by
+`test_hostile_evidence_urls_rejected` and
+`test_legitimate_evidence_urls_still_accepted`.
 
 **Leader-supplied evidence.** A dishonest leader reporting bytes it never fetched.
 *Addressed:* the validator re-fetches independently; the leader's bytes never
@@ -63,6 +91,20 @@ always re-add to the whole. Property-checked across amounts and rates in
 receive it reverting a settlement.
 *Addressed:* settlements only ever credit an internal balance. `claim()` is
 pull-only and zeroes the balance before transferring.
+
+**Treasury fees accumulating with no reachable drain.** A protocol-fee share
+credited to the treasury on every slash, with the treasury keyed by a
+different expression (`self.treasury.as_hex`, checksummed) than every other
+party (already-lowercased stored strings) — exactly where a key-normalization
+mismatch would hide. `_credit` lowercases centrally so it is correct, but
+nothing had proven it: the existing `claim()` test only ever drained an
+ordinary party's balance.
+*Addressed:* `_credit` normalizes every key the same way regardless of source.
+Covered by `test_the_treasury_can_actually_drain_its_accrued_fees`, which
+seeds a real balance and asserts the exact recipient and amount `claim()`
+pays out — not proven live, since every live verdict run against a zero-bond
+deployment produces a zero-amount split by construction (see
+`deploy/deployments.json`'s disclosed gap on real fund movement).
 
 **Charging for infrastructure failure.** Slashing an agent because a page was
 down.

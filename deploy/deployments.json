@@ -67,11 +67,28 @@
       "check": "can_invoke on that same child after revoking its ROOT",
       "result": "denied: ancestor g1: grant status is revoked",
       "detail": "the child's own status is still ACTIVE; the walk to the root is what denies it, and it names the ancestor"
+    },
+    {
+      "check": "OUT_OF_SCOPE prove_use taints a grant; can_invoke denies while status stays ACTIVE",
+      "result": "pass",
+      "detail": "claimed a deletion the clause forbade, evidence was an unrelated public page; violated_clause_ids named c0 correctly"
+    },
+    {
+      "check": "clear_taint lifts the taint and can_invoke is allowed again",
+      "result": "pass"
+    },
+    {
+      "check": "revise_child on a DENIED proposal: version bumps, status returns to PROPOSED, re-review settles NARROWER_OR_EQUAL",
+      "result": "pass",
+      "detail": "full AMBIGUOUS/DENIED escape-hatch cycle proven: DENIED -> revise_child -> PROPOSED v2 -> re-review -> ACTIVE"
+    },
+    {
+      "check": "challenge on an ACTIVE grant: re-review still NARROWER_OR_EQUAL, upheld false, challenger bond refunded, grant stays ACTIVE",
+      "result": "pass"
     }
   ],
   "notProvenLive": [
-    "Real fund movement. claim() is the only path that moves GEN out, via gl.chain.Account(...).emit_transfer. The CLI cannot attach value to a payable call, so posting a real bond needs a browser wallet or a raw signing key. Until that runs, the bond economics are proven by tests and by the settlement records above, not by an on-chain balance delta.",
-    "challenge(), revise_child() and clear_taint() have not been run on chain."
+    "Real fund movement above zero. claim() is the only path that moves GEN out, via gl.chain.Account(...).emit_transfer. The CLI cannot attach value to a payable call, so posting a real nonzero bond needs a browser wallet or a raw signing key. Every other write method -- create_root, propose_child, revise_child, revoke, request_review, challenge, prove_use, clear_taint -- has now been exercised live on chain (see liveVerification above), on a zero-bond twin deployment so the judgment and settlement code runs for real with nothing at stake."
   ],
   "notes": [
     "eth_getCode returns 0x for a live GenLayer contract -- verified against a known-live address. Liveness is probed with gen_getContractSchema."

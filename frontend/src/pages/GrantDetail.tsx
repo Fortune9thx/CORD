@@ -17,7 +17,7 @@ import {
   TokenList,
   VerdictPill,
 } from "../components/ui";
-import { getChildren, getGrant, getReview, getUse, getUses, grantIdWasIssued } from "../lib/chain";
+import { getChildren, getConfig, getGrant, getReview, getUse, getUses, grantIdWasIssued } from "../lib/chain";
 import { fmtDate, fmtDateTime, fmtGen, relativeExpiry, shortAddr } from "../lib/format";
 import type { Grant, Review, UseRecord } from "../lib/types";
 
@@ -29,6 +29,13 @@ export default function GrantDetail() {
   const [review, setReview] = useState<Review | null>(null);
   const [children, setChildren] = useState<string[]>([]);
   const [uses, setUses] = useState<UseRecord[]>([]);
+  // The contract's bonds are set once at construction and can differ from
+  // deployment to deployment (create_root takes them as constructor args).
+  // Hardcoding the amount this button attaches would silently send the
+  // wrong value against any instance configured differently from the one
+  // this UI happened to be built against.
+  const [reviewBond, setReviewBond] = useState<bigint | null>(null);
+  const [challengeBond, setChallengeBond] = useState<bigint | null>(null);
   const [error, setError] = useState("");
 
   /** Exposed so a settled write refreshes this page before reporting success. */
@@ -61,6 +68,10 @@ export default function GrantDetail() {
 
       const records = await Promise.all(useIds.map((u) => getUse(u).catch(() => null)));
       setUses(records.filter((u): u is UseRecord => Boolean(u)));
+
+      const cfg = await getConfig().catch(() => null);
+      setReviewBond(cfg?.review_bond ? BigInt(cfg.review_bond as string) : null);
+      setChallengeBond(cfg?.challenge_bond ? BigInt(cfg.challenge_bond as string) : null);
       setError("");
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -291,24 +302,24 @@ export default function GrantDetail() {
         )}
 
         <div className="mt-8 flex flex-wrap gap-3 border-t border-slate-100 pt-7">
-          {grant.status === "PROPOSED" && (
+          {grant.status === "PROPOSED" && reviewBond !== null && (
             <TxButton
               method="request_review"
               args={[grant.id]}
-              value={10n ** 16n}
+              value={reviewBond}
               onDone={reload}
             >
-              + Request review (0.01 GEN bond)
+              + Request review ({fmtGen(reviewBond)} GEN bond)
             </TxButton>
           )}
-          {grant.effective_status === "ACTIVE" && grant.parent_id && (
+          {grant.effective_status === "ACTIVE" && grant.parent_id && challengeBond !== null && (
             <TxButton
               method="challenge"
               args={[grant.id]}
-              value={2n * 10n ** 16n}
+              value={challengeBond}
               onDone={reload}
             >
-              + Challenge (0.02 GEN bond)
+              + Challenge ({fmtGen(challengeBond)} GEN bond)
             </TxButton>
           )}
           {grant.status !== "REVOKED" && (
