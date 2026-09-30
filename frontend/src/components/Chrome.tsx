@@ -241,7 +241,7 @@ export function Footer() {
               </li>
               <li>
                 <a
-                  href="https://github.com/Fortune9thx/CORD/blob/main/docs/STATUS.md"
+                  href="https://github.com/Fortune9thx/CORD/blob/main/deploy/deployments.json"
                   target="_blank"
                   rel="noreferrer"
                   className="hover:text-white"

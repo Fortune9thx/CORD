@@ -1,236 +1,202 @@
-# Deploying CORD from PowerShell
+# Deploying CORD
 
-Studio Dev (chain **61997**) for the contract, Vercel for the app.
+Studio Dev, chain **61997**, RPC `https://studio-dev.genlayer.com/api`.
 
-Nothing here writes an address anywhere until `eth_getCode` confirms code is
-actually live at it. That order is the point — an address recorded before that
-check is a claim, not a fact.
+The current deployment is recorded in [`deploy/deployments.json`](../deploy/deployments.json),
+including the sha256 of the exact bundle that was deployed.
 
 ---
 
-## 0. Prerequisites
+## 1. Build and check locally
 
 ```powershell
-node --version      # 20 or newer
-python --version    # 3.11 or newer
-git --version
-```
-
-Clone and verify the build before touching the network:
-
-```powershell
-git clone https://github.com/Fortune9thx/CORD.git
-cd CORD
-git checkout claude/vigilant-babbage-8197tv
-
 pip install pytest "ruff==0.16.9"
 python contracts\build_bundle.py
-python -m pytest tests\ -q          # expect: 146 passed
+python -m pytest tests\ -q
 python -m ruff check contracts tests
+$env:PYTHONIOENCODING = "utf-8"
+genvm-lint contracts\build\Cord.bundled.py
 ```
 
-If the bundle or tests fail here, stop. Deploying a build you have not verified
-wastes a funded key.
+`contracts/build/Cord.bundled.py` is generated. Edit `contracts/Cord.py` or
+`contracts/cordlib/*.py` and rebuild; CI fails on a stale bundle.
+
+`PYTHONIOENCODING` is needed on Windows or `genvm-lint` fails writing its own
+check mark.
 
 ---
 
-## 1. Install the GenLayer CLI
+## 2. Probe the network before spending anything
+
+`gen_getContractSchemaForCode` executes the contract's module body on a real
+validator and returns its ABI. It costs nothing and it is the only local-free
+check that exercises the actual runner.
 
 ```powershell
-npm install -g genlayer@0.39.2
-genlayer --version
+python - <<'PY'
+from genlayer_py import create_client
+from genlayer_py.chains import studio_devnet
+c = create_client(chain=studio_devnet)
+print(c.get_contract_schema_for_code(open("contracts/build/Cord.bundled.py","rb").read())["methods"].keys())
+PY
 ```
 
-> The CLI's built-in network list offers `studionet`, which is chain **61999**
-> (`https://studio.genlayer.com/api`) — *not* Studio Dev. Do not
-> `genlayer network set studionet` and assume you are on 61997. Every command
-> below passes `--rpc` explicitly instead.
+**Run this before every deploy.** A contract that fails here will fail on chain
+after you have paid for it, and the traceback this returns is far easier to read
+than one dug out of the explorer.
 
 ---
 
-## 2. Provide a funded key
+## 3. Fees
 
-You need a real **64-hex** private key funded with GEN on Studio Dev. The
-placeholder shipped in some environments is 32 characters and will be rejected
-at import.
+A deploy or write sent without a **complete** fee distribution is rejected
+client-side with `FeeValueMustBeNonZero(N)` and never reaches the chain. A
+partial distribution fails the same way, so `--fee-value` on its own is not
+enough. **Writes need this too, not just deploys.**
 
-```powershell
-# Set for this session only — do not commit it, do not paste it into a file.
-$env:GENLAYER_PRIVATE_KEY = "0x<64 hex characters>"
-
-# Sanity check the shape without printing the key:
-$k = $env:GENLAYER_PRIVATE_KEY -replace '^0x',''
-"length=$($k.Length) allHex=$($k -match '^[0-9a-fA-F]+$')"
-# expect: length=64 allHex=True
-```
-
-Import it into the CLI keystore:
+The distribution below was copied from a real successful deploy on this
+network. If it ever stops working, pull a fresh one rather than guessing:
 
 ```powershell
-genlayer account import --name default --private-key $env:GENLAYER_PRIVATE_KEY
+# find a recent successful deploy and copy its distribution verbatim
+curl "https://explorer-studio-dev.genlayer.com/api/transactions?limit=60"
+# then: <that tx>.data.fee_accounting.top_ups[0].feesDistribution
 ```
 
-If this reports `Invalid private key format`, the key is not 64 hex characters —
-fix that before going further.
+Do not use `genlayer estimate-fees` for this. Its `feeValue` has been observed
+around a thousand times larger than what real successful deploys actually pay,
+and its distribution has a different shape.
+
+```
+--fees '{"distribution":{"rotations":[3],"appealRounds":0,"totalMessageFees":0,
+  "executionConsumed":0,"receiptFeeMaxGasPrice":"300000000",
+  "storageFeeMaxGasPrice":"300000000","maxPriceGenPerTimeUnit":"2",
+  "executionBudgetPerRound":"25000000000000000",
+  "leaderTimeunitsAllocation":"100","validatorTimeunitsAllocation":"200"}}'
+--fee-value 100000000000010352
+```
 
 ---
 
-## 3. Deploy
+## 4. Deploy
 
-The constructor takes, in order:
+Constructor, in order:
 
-| # | Argument | Type | Suggested value |
+| # | Argument | Type | Value used |
 |---|---|---|---|
-| 1 | `treasury` | address | your address, or `""` to default to the deployer |
+| 1 | `treasury` | address | deployer address |
 | 2 | `review_bond` | int (wei) | `10000000000000000` (0.01 GEN) |
 | 3 | `challenge_bond` | int (wei) | `20000000000000000` (0.02 GEN) |
 | 4 | `use_bond` | int (wei) | `0` (opt-in) |
-| 5 | `fee_bps` | int | `1000` (10% of a slash to the treasury) |
+| 5 | `fee_bps` | int | `1000` (10% of a slash) |
 
 ```powershell
-$RPC = "https://studio-dev.genlayer.com/api"
-
 genlayer deploy `
   --contract contracts\build\Cord.bundled.py `
-  --rpc $RPC `
-  --args "0x<your-treasury-address>" 10000000000000000 20000000000000000 0 1000
+  --rpc https://studio-dev.genlayer.com/api `
+  --args 0xYOURADDRESS 10000000000000000 20000000000000000 0 1000 `
+  --fees $FEES --fee-value 100000000000010352
 ```
 
-Omit the treasury by passing `""` to have it default to the deploying account.
+### Quoting the address argument
 
-Record the address the CLI prints as `$ADDR` — but do not put it in any config
-file yet.
+Pass the address **bare**: `--args 0xabc…`. The CLI detects a 40-hex value and
+encodes it as an address; CORD normalises address-typed and string arguments to
+the same thing.
 
-```powershell
-$ADDR = "0x<address the CLI printed>"
-```
+Do **not** wrap it in JSON quotes from a POSIX shell. `--args '"0xabc…"'` sends
+the double-quote characters as part of the value, and the contract reverts
+trying to base64-decode `"0xabc…`. The PowerShell form above is correct as
+written.
 
 ---
 
-## 4. Confirm the deploy before believing it
+## 5. Confirm the deploy before believing it
 
-This is the gate. Until it passes, treat the contract as not deployed.
+**`eth_getCode` is the wrong probe.** It returns `0x` for a GenLayer contract
+that is demonstrably live — verified against a known-live address on this
+chain. Anything gated on it reports every healthy deployment as dead.
 
-```powershell
-$body = @{ jsonrpc="2.0"; id=1; method="eth_getCode"; params=@($ADDR,"latest") } |
-        ConvertTo-Json -Compress
-
-$code = (Invoke-RestMethod -Uri $RPC -Method Post -ContentType "application/json" -Body $body).result
-
-if ($code -and $code -ne "0x" -and $code -ne "0x0") {
-    "LIVE — $($code.Length) chars of code at $ADDR"
-} else {
-    "NOT LIVE — no code at $ADDR. Do not record this address."
-}
-```
-
-Also confirm you are on the right chain:
+Use `gen_getContractSchema`:
 
 ```powershell
-$cid = @{ jsonrpc="2.0"; id=1; method="eth_chainId"; params=@() } | ConvertTo-Json -Compress
-$hex = (Invoke-RestMethod -Uri $RPC -Method Post -ContentType "application/json" -Body $cid).result
-"chainId = $([Convert]::ToInt64($hex,16))"   # expect: 61997
+$body = @{ jsonrpc="2.0"; id=1; method="gen_getContractSchema"; params=@($ADDR) } |
+  ConvertTo-Json
+Invoke-RestMethod -Method Post -Uri $RPC -ContentType "application/json" -Body $body
 ```
 
-Smoke-test a view to prove the contract answers:
+A schema with a non-empty `methods` map is the gate. Until it passes, treat the
+contract as not deployed and do not write the address anywhere.
+
+`ACCEPTED` on its own is also not proof. A transaction can be fully committed by
+consensus while its execution was a hard error. Check the leader receipt's
+`execution_result` is `SUCCESS`:
 
 ```powershell
-genlayer call $ADDR get_config --rpc $RPC
+curl "https://explorer-studio-dev.genlayer.com/api/transactions/$TX"
+# .consensus_data.leader_receipt[0].execution_result
 ```
 
-You should get the bonds, `fee_bps`, `max_depth: 8` and `next_id: 1` back.
+If it is `ERROR`, the revert reason is base64 in that receipt's `result` field.
 
 ---
 
-## 5. Record the address (only now)
+## 6. Smoke-test on chain
 
 ```powershell
-@{
-  network  = "studio-dev"
-  chainId  = 61997
-  rpc      = $RPC
-  address  = $ADDR
-  deployed = (Get-Date).ToUniversalTime().ToString("o")
-} | ConvertTo-Json | Set-Content deployments.json
+genlayer write $ADDR create_root --rpc $RPC `
+  --args 0xYOURADDRESS '["read","write"]' '["db:orders"]' $EXPIRY '["May only read recent orders."]' `
+  --fees $FEES --fee-value 100000000000010352
+
+genlayer call $ADDR can_invoke --rpc $RPC --args g1 0xYOURADDRESS read db:orders
+# {"allowed": true, "reason": ""}
+
+genlayer write $ADDR revoke --rpc $RPC --args g1 --fees $FEES --fee-value 100000000000010352
+genlayer call $ADDR can_invoke --rpc $RPC --args g1 0xYOURADDRESS read db:orders
+# {"allowed": false, "reason": "grant status is revoked"}
 ```
 
-Update `docs/STATUS.md` to replace the "not deployed" section with the address
-and the `eth_getCode` result that confirmed it.
+That last flip is the property the whole design rests on. Confirm it against a
+real chain, not only against the test suite.
+
+Expect an occasional `UNDETERMINED` under real volume. CORD re-derives each
+judgment independently inside every validator, which makes disagreement more
+likely than in a contract that only compares formatting. The UI treats it as its
+own state rather than as a denial.
 
 ---
 
-## 6. Deploy the frontend to Vercel
+## 7. Frontend
 
 ```powershell
-npm install -g vercel
 cd frontend
 npm install
-npm run build          # verify locally first
-vercel login
-vercel link
+npm run build
 ```
 
-Set the environment variables. `VITE_CONTRACT_ADDRESS` is the only one that
-should be new information at this point:
+Environment (see `.env.example`):
 
-```powershell
-"https://studio-dev.genlayer.com/api"        | vercel env add VITE_GENLAYER_RPC_URL production
-"61997"                                      | vercel env add VITE_GENLAYER_CHAIN_ID production
-"https://explorer-studio-dev.genlayer.com"   | vercel env add VITE_EXPLORER production
-$ADDR                                        | vercel env add VITE_CONTRACT_ADDRESS production
-
-vercel --prod
-```
-
-`vercel.json` already sets the SPA rewrite, so deep links like
-`/app/grants/g1` resolve instead of 404ing.
-
----
-
-## 7. Verify the deployed app
-
-Open the production URL and check the banner, which is the app's honest
-self-report:
-
-| Banner | Meaning |
+| Variable | Value |
 |---|---|
-| **Live** + address | `eth_getCode` confirmed code. This is the one you want. |
-| Not deployed | `VITE_CONTRACT_ADDRESS` is unset — the env var did not reach the build |
-| No code at the configured address | Studio Dev state was reset; redeploy and update the address |
-| RPC reported chain N | Wrong RPC configured |
-| RPC unreachable | Network or endpoint problem |
+| `VITE_CONTRACT_ADDRESS` | the address confirmed in §5 |
+| `VITE_GENLAYER_RPC_URL` | `https://studio-dev.genlayer.com/api` |
+| `VITE_GENLAYER_CHAIN_ID` | `61997` |
+| `VITE_EXPLORER` | `https://explorer-studio-dev.genlayer.com` |
 
-Then walk one delegation end to end:
+`vercel.json` carries the SPA rewrite and the security headers.
 
-1. `/app/grants/new` — create a root grant.
-2. `/app/grants/:id` → **Delegate** — propose a narrower child. Try widening a
-   capability first; it should be rejected immediately, with no validator run.
-3. On the child → **Request review** — posts the bond and settles the verdict.
-4. `/app/checks` — run `can_invoke` for the child's grantee. Then revoke the
-   root and run it again: it must flip to denied, citing the ancestor.
-
-Step 4 is the one worth doing deliberately — it is the fail-closed behaviour the
-whole design rests on.
+The first paint on a page that reads the chain takes several seconds, because
+`gen_getContractSchema` executes the contract to answer. The banner shows that
+it is still checking rather than guessing.
 
 ---
 
-## Troubleshooting
+## 8. Network notes
 
-**`Invalid private key format`** — the key is not 64 hex characters. Check with
-the length probe in step 2.
+Do not run `genlayer network set studionet`. That is chain **61999**, not Studio
+Dev's **61997**. Every command here passes `--rpc` explicitly for that reason.
+Check `genlayer network info` before deploying; the CLI's active network has
+been observed differing from the project's.
 
-**Deploy reverts in the constructor** — check `fee_bps` is 0–10000 and no bond is
-negative. The treasury argument accepts either a hex string or a decoded
-address, so encoding is not the cause.
-
-**Deploy succeeds but `eth_getCode` is empty** — the transaction was not
-finalized. Check `genlayer receipt <txId> --rpc $RPC`, and `genlayer finalize`
-if it is idle.
-
-**App shows "no code" after working earlier** — Studio Dev resets wipe
-deployed state. Redeploy and update `VITE_CONTRACT_ADDRESS`. This is expected on
-a development network, not a bug.
-
-**Writes are greyed out in the app** — the client disables them until
-`eth_getCode` confirms the contract. Fix the banner state first; the button is a
-symptom, not the problem.
+Studio Dev state may reset. An address that was live can stop resolving. The app
+treats that as its own banner state rather than as an error.

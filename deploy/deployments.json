@@ -1,0 +1,51 @@
+{
+  "network": {
+    "name": "GenLayer Studio Dev",
+    "chainId": 61997,
+    "rpc": "https://studio-dev.genlayer.com/api",
+    "explorer": "https://explorer-studio-dev.genlayer.com"
+  },
+  "runner": "py-genlayer:5jycge4q8k23462jtb0b9fyey1s9qz928sz2nbrd9mg4sxqg2qng",
+  "contract": {
+    "name": "Cord",
+    "address": "0x87a4948504c60a74d65A8Db6592DB79f639c22E0",
+    "deployTx": "0x48ce232ad262a9c6af6b55e17aa721c264807a9fd62a821add3e70c3fb25b343",
+    "consensusStatus": "ACCEPTED",
+    "leaderExecution": "SUCCESS",
+    "bundleBytes": 50131,
+    "bundleSha256": "dd2d66e672bcfe288d4e62610f47ea73b4552ba8ba14a3366625fb953583c0bc",
+    "constructor": {
+      "treasury": "0xc6e6d3b2accaececeb40ad4bd3df123ddcb4e537",
+      "review_bond": "10000000000000000",
+      "challenge_bond": "20000000000000000",
+      "use_bond": "0",
+      "fee_bps": 1000
+    }
+  },
+  "liveVerification": [
+    {
+      "check": "gen_getContractSchema returns 19 methods",
+      "result": "pass"
+    },
+    {
+      "check": "get_config reads back the constructor state",
+      "result": "pass"
+    },
+    {
+      "check": "create_root wrote grant g1",
+      "result": "pass",
+      "note": "created_at 1790773662, a real chain timestamp"
+    },
+    {
+      "check": "can_invoke on the active grant",
+      "result": "allowed"
+    },
+    {
+      "check": "can_invoke after revoke",
+      "result": "denied: grant status is revoked"
+    }
+  ],
+  "notes": [
+    "eth_getCode returns 0x for a live GenLayer contract. Liveness is probed with gen_getContractSchema; see docs/DEPLOY.md."
+  ]
+}

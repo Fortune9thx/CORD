@@ -94,5 +94,7 @@ nothing. Covered by `test_ambiguous_challenge_refunds_without_disturbing_the_gra
   no governance path to change them on a live deployment.
 - **Clause text is public.** Everything stored is on-chain and world-readable.
   Grants should not carry secrets.
-- **Wall-clock expiry.** Expiry uses `gl.block.timestamp` and inherits whatever
-  precision the chain provides.
+- **Wall-clock expiry.** Expiry is compared against `gl.message.datetime`, the
+  timestamp carried by the message being executed. Every validator re-executing
+  a call sees the identical value, so expiry cannot be a source of consensus
+  disagreement. It inherits whatever precision the chain stamps messages with.

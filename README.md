@@ -76,13 +76,14 @@ is ever accepted from a caller.
 |---|---|
 | RPC | `https://studio-dev.genlayer.com/api` |
 | Explorer | `https://explorer-studio-dev.genlayer.com` |
-| Contract address | **not deployed** — see [docs/STATUS.md](docs/STATUS.md) |
+| Contract | [`0x87a4948504c60a74d65A8Db6592DB79f639c22E0`](https://explorer-studio-dev.genlayer.com/address/0x87a4948504c60a74d65A8Db6592DB79f639c22E0) |
+| Runner | `py-genlayer:5jycge4q8k23462jtb0b9fyey1s9qz928sz2nbrd9mg4sxqg2qng` |
 
-The RPC was verified live from this workspace (`eth_chainId` → `0xf22d` = 61997),
-but no valid deploy key was available in the environment, so no address is
-claimed. The frontend reads `VITE_CONTRACT_ADDRESS` and shows an honest
-"not deployed" banner while it is unset; it never invents a grant to fill the
-screen. Studio Dev state may reset.
+The frontend reads `VITE_CONTRACT_ADDRESS` and shows an explicit banner for
+every state it can be in — checking, live, wrong chain, RPC unreachable, or an
+address with no contract at it. It never invents a grant to fill the screen.
+Studio Dev state may reset, and an address that was live can stop resolving;
+that is its own banner state, not an error.
 
 ## Fail-closed authority
 
@@ -101,9 +102,10 @@ contracts/Cord.py            the intelligent contract
 contracts/cordlib/           pure logic — no genlayer import, directly testable
 contracts/build_bundle.py    inlines cordlib into the single deployable file
 contracts/build/             generated single-file bundle
-tests/                       146 tests: pure logic, contract state machine, bundle gates
+tests/                       pure logic, contract state machine, bundle gates
 frontend/                    Vite + React + TS + Tailwind app
-docs/                        architecture, audit, status, steward packet
+deploy/deployments.json      live address, deploy tx, bundle sha256
+docs/                        architecture, security review, deploy runbook
 ```
 
 ## Running it
@@ -111,7 +113,7 @@ docs/                        architecture, audit, status, steward packet
 ```bash
 pip install pytest
 python3 contracts/build_bundle.py     # -> contracts/build/Cord.bundled.py
-python3 -m pytest tests/ -q           # 146 passed
+python3 -m pytest tests/ -q
 
 cd frontend && npm install && npm run dev
 ```
@@ -125,13 +127,16 @@ disagrees, and each side fetching evidence independently.
 
 MIT — see [LICENSE](LICENSE). Security policy: [SECURITY.md](SECURITY.md).
 
-## Picking this up in a new session
+## Deployment
 
-Start with **[docs/HANDOFF.md](docs/HANDOFF.md)** — current state, the decisions
-that must not be silently reversed, the open questions, and the order to do the
-remaining work in.
+Live on GenLayer Studio Dev (chain 61997) at
+[`0x87a4948504c60a74d65A8Db6592DB79f639c22E0`](https://explorer-studio-dev.genlayer.com/address/0x87a4948504c60a74d65A8Db6592DB79f639c22E0).
 
-## Deploying
+The address, deploy transaction, constructor arguments and the sha256 of the
+exact deployed bundle are recorded in
+[`deploy/deployments.json`](deploy/deployments.json), along with the on-chain
+checks that were run against it.
 
-Step-by-step PowerShell runbook for Studio Dev and Vercel: [docs/DEPLOY.md](docs/DEPLOY.md).
-An address is recorded only after `eth_getCode` confirms code at it.
+Runbook: [docs/DEPLOY.md](docs/DEPLOY.md). An address is recorded only after
+`gen_getContractSchema` returns a schema for it — `eth_getCode` returns `0x`
+for a live GenLayer contract and cannot be used as a liveness probe.
