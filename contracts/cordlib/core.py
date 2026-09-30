@@ -405,6 +405,8 @@ _HOST_RE = re.compile(r"^[a-z0-9.-]+$")
 _NUMERIC_HOST_RE = re.compile(r"^(0[xX][0-9a-fA-F]+|[0-9]+)$")
 # Any bare dotted-quad, public or not: evidence must name a domain.
 _DOTTED_IP_RE = re.compile(r"^[0-9]{1,3}(\.[0-9]{1,3}){3}$")
+# A real public suffix always starts with a letter; no packed-IP form does.
+_TLD_RE = re.compile(r"^[a-z][a-z0-9-]*$")
 _PRIVATE_HOST_RE = re.compile(
     r"^("
     r"localhost|"
@@ -457,6 +459,14 @@ def normalize_evidence_url(raw):
     if "." not in host:
         fail("evidence url host is not a public domain")
     if _DOTTED_IP_RE.fullmatch(host):
+        fail("evidence url host is not a public domain")
+    # The dotted-quad check above only catches the canonical four-part form.
+    # inet_aton also accepts 127.1, 0177.0.0.1 and 0x7f.0x0.0x0.0x1 -- all of
+    # them loopback, all of them previously accepted here. Rather than chase
+    # each encoding, require the last label to look like a real TLD: every
+    # public suffix begins with a letter (including punycode, xn--...), and no
+    # packed-IP form can satisfy that. This closes the whole family at once.
+    if not _TLD_RE.fullmatch(host.rsplit(".", 1)[1]):
         fail("evidence url host is not a public domain")
     return u
 

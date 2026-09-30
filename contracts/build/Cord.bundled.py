@@ -369,6 +369,8 @@ _HOST_RE = re.compile(r"^[a-z0-9.-]+$")
 _NUMERIC_HOST_RE = re.compile(r"^(0[xX][0-9a-fA-F]+|[0-9]+)$")
 # Any bare dotted-quad, public or not: evidence must name a domain.
 _DOTTED_IP_RE = re.compile(r"^[0-9]{1,3}(\.[0-9]{1,3}){3}$")
+# A real public suffix always starts with a letter; no packed-IP form does.
+_TLD_RE = re.compile(r"^[a-z][a-z0-9-]*$")
 _PRIVATE_HOST_RE = re.compile(
     r"^("
     r"localhost|"
@@ -415,6 +417,14 @@ def normalize_evidence_url(raw):
     if "." not in host:
         fail("evidence url host is not a public domain")
     if _DOTTED_IP_RE.fullmatch(host):
+        fail("evidence url host is not a public domain")
+    # The dotted-quad check above only catches the canonical four-part form.
+    # inet_aton also accepts 127.1, 0177.0.0.1 and 0x7f.0x0.0x0.0x1 -- all of
+    # them loopback, all of them previously accepted here. Rather than chase
+    # each encoding, require the last label to look like a real TLD: every
+    # public suffix begins with a letter (including punycode, xn--...), and no
+    # packed-IP form can satisfy that. This closes the whole family at once.
+    if not _TLD_RE.fullmatch(host.rsplit(".", 1)[1]):
         fail("evidence url host is not a public domain")
     return u
 
@@ -572,6 +582,9 @@ MAX_EVIDENCE_CHARS = 6000
 _TAG_RE = re.compile(r"<[^>]{0,4000}>")
 _SCRIPT_RE = re.compile(r"(?is)<(script|style|noscript|template)\b.*?</\1\s*>")
 _FENCE_RE = re.compile(r"[`\u0000-\u0008\u000b\u000c\u000e-\u001f]")
+# The prompt's own block delimiter is a run of '='. Collapse any run of two
+# or more so quoted text can never forge one.
+_EQ_RUN_RE = re.compile(r"={2,}")
 
 
 def strip_html(raw):
@@ -594,6 +607,7 @@ def sanitize_untrusted(raw, limit):
     if not isinstance(raw, str):
         raw = str(raw)
     t = _FENCE_RE.sub(" ", raw)
+    t = _EQ_RUN_RE.sub("=", t)
     t = re.sub(r"\s+", " ", t).strip()
     if len(t) > limit:
         t = t[:limit] + " …[truncated]"
@@ -633,6 +647,11 @@ _HOSTILE_NOTE = (
 )
 
 
+def _token_line(label, tokens):
+    safe = [sanitize_untrusted(t, MAX_TOKEN_CHARS) for t in tokens]
+    return label + ": " + ", ".join(safe) + "\n"
+
+
 def _clause_block(label, clauses):
     if not clauses:
         return label + ": (none)\n"
@@ -658,13 +677,13 @@ def build_review_prompt(parent, child):
         "judge silence by whether the child's claimed powers could be exercised "
         "in breach of it.\n\n"
         "=== BEGIN UNTRUSTED PARENT GRANT ===\n"
-         "capabilities: " + ", ".join(parent["capabilities"]) + "\n"
-        + "resources: " + ", ".join(parent["resources"]) + "\n"
+        + _token_line("capabilities", parent["capabilities"])
+        + _token_line("resources", parent["resources"])
         + _clause_block("parent clauses", parent["clauses"])
         + "=== END UNTRUSTED PARENT GRANT ===\n\n"
         "=== BEGIN UNTRUSTED CHILD GRANT ===\n"
-        + "capabilities: " + ", ".join(child["capabilities"]) + "\n"
-        + "resources: " + ", ".join(child["resources"]) + "\n"
+        + _token_line("capabilities", child["capabilities"])
+        + _token_line("resources", child["resources"])
         + _clause_block("child clauses", child["clauses"])
         + "=== END UNTRUSTED CHILD GRANT ===\n\n"
         + _HOSTILE_NOTE + "\n\n"
@@ -705,8 +724,8 @@ def build_use_prompt(grant, action, evidence):
         "it offered as proof. Judge the action against the grant using the "
         "evidence — not the agent's own characterisation of it.\n\n"
         "=== BEGIN UNTRUSTED GRANT ===\n"
-         "capabilities: " + ", ".join(grant["capabilities"]) + "\n"
-        + "resources: " + ", ".join(grant["resources"]) + "\n"
+        + _token_line("capabilities", grant["capabilities"])
+        + _token_line("resources", grant["resources"])
         + _clause_block("clauses", grant["clauses"])
         + "=== END UNTRUSTED GRANT ===\n\n"
         "=== BEGIN UNTRUSTED ACTION DESCRIPTION ===\n"

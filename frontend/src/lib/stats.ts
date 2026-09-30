@@ -8,7 +8,7 @@
  */
 
 /** Count of tests in tests/. Checked against pytest's own collection. */
-export const TEST_COUNT = 161;
+export const TEST_COUNT = 172;
 
 /** Mirrors MAX_DEPTH in contracts/Cord.py. */
 export const MAX_DELEGATION_DEPTH = 8;

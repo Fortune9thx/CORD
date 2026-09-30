@@ -14,6 +14,7 @@ from .core import (
     EXPANDS_AUTHORITY,
     INCONCLUSIVE,
     MAX_ACTION_CHARS,
+    MAX_TOKEN_CHARS,
     NARROWER_OR_EQUAL,
     OUT_OF_SCOPE,
     WITHIN_SCOPE,
@@ -25,6 +26,9 @@ MAX_EVIDENCE_CHARS = 6000
 _TAG_RE = re.compile(r"<[^>]{0,4000}>")
 _SCRIPT_RE = re.compile(r"(?is)<(script|style|noscript|template)\b.*?</\1\s*>")
 _FENCE_RE = re.compile(r"[`\u0000-\u0008\u000b\u000c\u000e-\u001f]")
+# The prompt's own block delimiter is a run of '='. Collapse any run of two
+# or more so quoted text can never forge one.
+_EQ_RUN_RE = re.compile(r"={2,}")
 
 
 def strip_html(raw):
@@ -51,13 +55,19 @@ def strip_html(raw):
 def sanitize_untrusted(raw, limit):
     """Make hostile text safe to embed in a fenced prompt block.
 
-    Backticks and control characters are removed so the text cannot close the
-    fence it is placed in, and the result is truncated to a fixed budget so one
-    oversized page cannot crowd out the rules.
+    Backticks and control characters are removed. Then runs of `=` are
+    collapsed: the fence this text sits inside is `=== BEGIN/END UNTRUSTED
+    ... ===`, so text carrying its own `===` run can forge a closing marker
+    and make whatever follows it read as instruction rather than quoted data.
+    An earlier version stripped only backticks while claiming to stop the text
+    closing its fence -- it was defending a delimiter this prompt never uses.
+    Finally the result is truncated, so one oversized page cannot crowd out
+    the rules.
     """
     if not isinstance(raw, str):
         raw = str(raw)
     t = _FENCE_RE.sub(" ", raw)
+    t = _EQ_RUN_RE.sub("=", t)
     t = re.sub(r"\s+", " ", t).strip()
     if len(t) > limit:
         t = t[:limit] + " …[truncated]"
@@ -98,6 +108,19 @@ _HOSTILE_NOTE = (
 )
 
 
+def _token_line(label, tokens):
+    """Capabilities and resources are caller-supplied free text too.
+
+    They were joined into the prompt raw while clauses, the action and fetched
+    evidence were all sanitized -- the exact asymmetry where the obvious
+    untrusted field gets attention and a secondary one that quietly joins the
+    same prompt does not. 32 tokens x 128 chars is a real budget of
+    attacker-controlled text.
+    """
+    safe = [sanitize_untrusted(t, MAX_TOKEN_CHARS) for t in tokens]
+    return label + ": " + ", ".join(safe) + "\n"
+
+
 def _clause_block(label, clauses):
     if not clauses:
         return label + ": (none)\n"
@@ -129,13 +152,13 @@ def build_review_prompt(parent, child):
         "judge silence by whether the child's claimed powers could be exercised "
         "in breach of it.\n\n"
         "=== BEGIN UNTRUSTED PARENT GRANT ===\n"
-         "capabilities: " + ", ".join(parent["capabilities"]) + "\n"
-        + "resources: " + ", ".join(parent["resources"]) + "\n"
+        + _token_line("capabilities", parent["capabilities"])
+        + _token_line("resources", parent["resources"])
         + _clause_block("parent clauses", parent["clauses"])
         + "=== END UNTRUSTED PARENT GRANT ===\n\n"
         "=== BEGIN UNTRUSTED CHILD GRANT ===\n"
-        + "capabilities: " + ", ".join(child["capabilities"]) + "\n"
-        + "resources: " + ", ".join(child["resources"]) + "\n"
+        + _token_line("capabilities", child["capabilities"])
+        + _token_line("resources", child["resources"])
         + _clause_block("child clauses", child["clauses"])
         + "=== END UNTRUSTED CHILD GRANT ===\n\n"
         + _HOSTILE_NOTE + "\n\n"
@@ -177,8 +200,8 @@ def build_use_prompt(grant, action, evidence):
         "it offered as proof. Judge the action against the grant using the "
         "evidence — not the agent's own characterisation of it.\n\n"
         "=== BEGIN UNTRUSTED GRANT ===\n"
-         "capabilities: " + ", ".join(grant["capabilities"]) + "\n"
-        + "resources: " + ", ".join(grant["resources"]) + "\n"
+        + _token_line("capabilities", grant["capabilities"])
+        + _token_line("resources", grant["resources"])
         + _clause_block("clauses", grant["clauses"])
         + "=== END UNTRUSTED GRANT ===\n\n"
         "=== BEGIN UNTRUSTED ACTION DESCRIPTION ===\n"
