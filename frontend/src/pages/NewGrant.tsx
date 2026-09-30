@@ -5,7 +5,6 @@ import { useState } from "react";
 import { ClauseEditor, ExpiryInput, FormCard, TokenInput, TxButton, parseTokens, toUnix } from "../components/Forms";
 import type { Clause } from "../components/Forms";
 import { Section } from "../components/ui";
-import { write } from "../lib/chain";
 
 export default function NewGrant() {
   const [grantee, setGrantee] = useState("");
@@ -60,15 +59,14 @@ export default function NewGrant() {
 
         <TxButton
           disabled={!ready}
-          onRun={() =>
-            write("create_root", [
-              grantee.trim(),
-              parseTokens(caps),
-              parseTokens(res),
-              toUnix(expiry),
-              clauses.filter((c) => c.text.trim()),
-            ])
-          }
+          method="create_root"
+          args={() => [
+            grantee.trim(),
+            parseTokens(caps),
+            parseTokens(res),
+            toUnix(expiry),
+            clauses.filter((c) => c.text.trim()),
+          ]}
         >
           + Create root grant
         </TxButton>

@@ -23,6 +23,38 @@ failure is treated as approval.
 Out of scope: Studio Dev state resets, GenLayer protocol and validator-set
 issues, and the accepted limitations recorded in [docs/audit.md](docs/audit.md).
 
+## Known operational characteristics
+
+These are expected behaviours, not defects. They are listed so an operator can
+tell them apart from a real fault.
+
+**Elevated validator timeout rate.** Every judgment runs through
+`gl.eq_principle.strict_eq`, which re-executes the whole judgment inside each
+validator — re-fetching the evidence and re-running the model independently.
+That is what makes the verdict trustworthy, and it costs roughly double the
+work per validator compared with a validator that only inspects the leader's
+output. Expect a higher share of `TIMEOUT` votes than a lighter contract would
+show. Quorum is normally still reached; a round that does not reach it returns
+`UNVERIFIABLE` / `INCONCLUSIVE`, which is inactive, refunded and retryable.
+
+**Validator disagreement persists nothing.** If validators reach genuinely
+different conclusions, the write executes without a Python exception but commits
+no state. The frontend classifies this explicitly and reports that nothing was
+written and nothing was charged; do not read a returned transaction hash as
+proof a write landed.
+
+**Direct signed transactions only.** `claim()` pays out to
+`gl.message.sender_address`, and `grantor` is recorded from the same source. If
+a method is invoked through another contract rather than by a signed
+transaction, that address is the calling *contract*, and GenVM provides no way
+for contract code to tell the two apart. A value transfer to a contract address
+can fail silently with no recovery path. **Use CORD only from directly signed
+transactions by externally owned accounts.** This is a hard requirement that
+cannot be enforced in code.
+
+**Grants are public.** Everything stored is on-chain and world-readable. Clause
+text must not carry secrets.
+
 ## Handling of keys
 
 No private key is committed to this repository, and none is read by any code in

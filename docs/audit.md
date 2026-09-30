@@ -40,7 +40,7 @@ enter shared state. Covered by `test_both_sides_fetch_the_evidence_independently
 
 **Split decision treated as approval.** Disagreement silently resolving to
 "active".
-*Addressed:* `run_nondet_default` raises, and CORD maps that to `RETRYABLE` /
+*Addressed:* `strict_eq` raises on disagreement, and CORD maps that to `RETRYABLE` /
 `INCONCLUSIVE` with a full refund. Covered by
 `test_validator_disagreement_is_retryable_not_authority`.
 

@@ -6,6 +6,7 @@ that exist separately for testing are concatenated here. The Depends line is
 re-emitted as byte one of the output with nothing above it.
 """
 
+import ast
 import pathlib
 import re
 import sys
@@ -51,6 +52,52 @@ def collect_stdlib_imports(texts):
     return found
 
 
+def strip_docstrings(source):
+    """Remove docstrings from the deployable file only.
+
+    Bradbury has an empirical deploy-size wall a little above 50KB of encoded
+    payload, and CORD is documented heavily on purpose. Docstrings are stripped
+    from the generated bundle so the source stays readable without spending
+    the deploy budget on prose. Comments are left alone: they are cheap and a
+    reviewer reads the bundle too.
+
+    Rewriting is done through the AST, so this can never alter a string that is
+    actually used — only expression-statement docstrings are dropped.
+    """
+    tree = ast.parse(source)
+    targets = (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Module)
+    drop = set()
+    for node in ast.walk(tree):
+        if not isinstance(node, targets):
+            continue
+        body = getattr(node, "body", None)
+        if not body:
+            continue
+        first = body[0]
+        if (
+            isinstance(first, ast.Expr)
+            and isinstance(first.value, ast.Constant)
+            and isinstance(first.value.value, str)
+        ):
+            # Never leave a body empty; a lone docstring becomes `pass`.
+            drop.add((first.lineno, first.end_lineno, len(body) == 1))
+
+    lines = source.splitlines(keepends=True)
+    removed = set()
+    for start, end, only in drop:
+        for i in range(start, end + 1):
+            removed.add(i)
+        if only:
+            indent = len(lines[start - 1]) - len(lines[start - 1].lstrip())
+            lines[start - 1] = " " * indent + "pass\n"
+            removed.discard(start)
+
+    out = [ln for i, ln in enumerate(lines, 1) if i not in removed]
+    result = "".join(out)
+    compile(result, "<stripped>", "exec")
+    return result
+
+
 def main():
     contract = (ROOT / "Cord.py").read_text(encoding="utf-8")
     if BEGIN not in contract or END not in contract:
@@ -79,6 +126,8 @@ def main():
     lines = bundled.splitlines()
     lines = [ln for ln in lines if not ln.startswith('# { "Depends"')]
     bundled = DEPENDS + "\n" + "\n".join(lines).lstrip("\n") + "\n"
+
+    bundled = strip_docstrings(bundled)
 
     OUT.parent.mkdir(parents=True, exist_ok=True)
     OUT.write_text(bundled, encoding="utf-8")

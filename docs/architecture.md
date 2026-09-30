@@ -29,7 +29,7 @@ judgment is what CORD puts on GenLayer.
     └────────────┬────────────┘
                  │ clean subset
     ┌────────────▼────────────┐
-    │  SEMANTIC REVIEW        │   gl.vm.run_nondet_default
+    │  SEMANTIC REVIEW        │   gl.eq_principle.strict_eq
     │  validators judge prose │
     └────────────┬────────────┘
         ┌────────┼────────┬──────────────┐
@@ -131,14 +131,39 @@ hostile.
   clauses is downgraded. A successful injection still cannot produce authority
   it did not also justify.
 
-## Why `run_nondet_default`
+## Why `eq_principle.strict_eq`
 
-`gl.vm.run_nondet` is the unsafe variant in SDK v0.3 — it does not run the
-validator's independent check. Every judgment in CORD goes through
-`gl.vm.run_nondet_default(leader, validator)`. When the validator disagrees the
-call raises, and CORD maps that to `UNVERIFIABLE` / `INCONCLUSIVE` — inactive,
-refunded, retryable. A split decision can never activate a grant. A bundle test
-asserts the unsafe name appears nowhere in the deployable file.
+Both judgments go through `gl.eq_principle.strict_eq(judge)`. The leader runs
+`judge`; every validator runs the same `judge` independently, in its own
+sandbox — re-fetching the evidence and re-running the model from scratch — and
+the platform requires the results to be identical.
+
+Two things make that workable:
+
+**Canonicalization.** Raw model output would never match across independent
+runs. `judge` returns `json.dumps(review_comparable(...), sort_keys=True)`, so
+what gets compared is the verdict class plus sorted clause-id sets. Identical
+whenever the judgments agree, different whenever they do not.
+
+**The platform reconciles, not us.** An earlier version of this contract used
+`gl.vm.run_nondet_default(leader, validator)` with a validator that made its own
+non-deterministic call and compared results in contract Python. That shape is
+rejected by GenVM's own protocol — it has produced `DETERMINISTIC_VIOLATION`
+votes even when the two results agreed. Reconciliation belongs to the
+equivalence principle; contract code must not sit between a validator and its
+verdict.
+
+`strict_eq` also happens to be the cheapest of the three principles, which
+matters here because each validator is already paying for a full independent
+re-derivation.
+
+When validators do not converge, the call raises and CORD maps that to
+`UNVERIFIABLE` / `INCONCLUSIVE` — inactive, refunded, retryable. An equivalence
+principle can also return an empty string rather than raising, so the agreed
+value is parsed through `_parse_agreed`, which treats empty or unparseable
+output as the same fail-closed result. A split decision can never activate a
+grant. Bundle tests assert both judgments use the primitive and that
+`run_nondet` appears nowhere in the deployable file.
 
 ## Single-file bundling
 

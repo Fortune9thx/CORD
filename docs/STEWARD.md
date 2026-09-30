@@ -28,7 +28,9 @@ the exact error rather than claiming an address that does not exist.
 
 ## The decision GenLayer makes
 
-Two, both through `gl.vm.run_nondet_default`:
+Two, both through `gl.eq_principle.strict_eq` — the leader and every validator
+run the identical judgment independently, and the platform requires the
+canonicalized results to match:
 
 1. **Semantic review** — is the child's written scope narrower than or equal to
    its parent's? `NARROWER_OR_EQUAL` / `EXPANDS_AUTHORITY` / `AMBIGUOUS`, plus

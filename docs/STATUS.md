@@ -9,7 +9,7 @@ _Last verified from the build workspace on 2026-09-28._
 | Bundle | `contracts/build/Cord.bundled.py`, ~58 KB, builds deterministically |
 | `Depends` directive | present as byte one, no BOM, asserted by test |
 | Contract classes | exactly one (`Cord`), asserted by test |
-| Unsafe `run_nondet` | absent, asserted by test |
+| Reconciliation | `gl.eq_principle.strict_eq`; direct `run_nondet` absent, asserted by test |
 | Tests | **146 passed** (82 pure logic, 56 contract state machine, 8 bundle gates) |
 
 ## Network

@@ -7,7 +7,7 @@ import { useHealth } from "../components/Chrome";
 import { ClauseEditor, ExpiryInput, FormCard, TokenInput, TxButton, parseTokens, toUnix } from "../components/Forms";
 import type { Clause } from "../components/Forms";
 import { Empty, Section, Spinner, TokenList } from "../components/ui";
-import { getGrant, write } from "../lib/chain";
+import { getGrant } from "../lib/chain";
 import { MAX_DEPTH } from "../lib/limits";
 import { fmtDate } from "../lib/format";
 import type { Grant } from "../lib/types";
@@ -95,16 +95,15 @@ export default function Delegate() {
 
           <TxButton
             disabled={!ready}
-            onRun={() =>
-              write("propose_child", [
-                id,
-                grantee.trim(),
-                parseTokens(caps),
-                parseTokens(res),
-                toUnix(expiry),
-                clauses.filter((c) => c.text.trim()),
-              ])
-            }
+            method="propose_child"
+            args={() => [
+              id,
+              grantee.trim(),
+              parseTokens(caps),
+              parseTokens(res),
+              toUnix(expiry),
+              clauses.filter((c) => c.text.trim()),
+            ]}
           >
             + Propose child
           </TxButton>

@@ -1,11 +1,11 @@
 /** Wallet-scoped activity: the grants you hold or granted, and what you can claim. */
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import { useHealth, useWallet } from "../components/Chrome";
 import { TxButton } from "../components/Forms";
 import { Empty, ErrorNote, Eyebrow, Section, Spinner } from "../components/ui";
-import { getClaimable, listGrants, write } from "../lib/chain";
+import { getClaimable, listGrants } from "../lib/chain";
 import { fmtGen, shortAddr } from "../lib/format";
 import type { Grant } from "../lib/types";
 import { GrantRow } from "./Grants";
@@ -17,30 +17,29 @@ export default function Activity() {
   const [claimable, setClaimable] = useState("0");
   const [error, setError] = useState("");
 
-  useEffect(() => {
+  /** Exposed so a settled write can refresh this page before reporting success. */
+  const reload = useCallback(async () => {
     if (health.state !== "live" || !account) {
       setGrants(health.state === "live" ? null : []);
       return;
     }
-    let alive = true;
-    (async () => {
-      try {
-        const [all, owed] = await Promise.all([
-          listGrants(),
-          getClaimable(account).catch(() => "0"),
-        ]);
-        if (!alive) return;
-        const me = account.toLowerCase();
-        setGrants(all.filter((g) => g.grantee === me || g.grantor === me));
-        setClaimable(owed);
-      } catch (e) {
-        if (alive) setError(e instanceof Error ? e.message : String(e));
-      }
-    })();
-    return () => {
-      alive = false;
-    };
+    try {
+      const [all, owed] = await Promise.all([
+        listGrants(),
+        getClaimable(account).catch(() => "0"),
+      ]);
+      const me = account.toLowerCase();
+      setGrants(all.filter((g) => g.grantee === me || g.grantor === me));
+      setClaimable(owed);
+      setError("");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
   }, [health.state, account]);
+
+  useEffect(() => {
+    void reload();
+  }, [reload]);
 
   if (!account) {
     return (
@@ -85,7 +84,9 @@ export default function Activity() {
 
         {claimable !== "0" && (
           <div className="mt-7 border-t border-slate-100 pt-7">
-            <TxButton onRun={() => write("claim", [])}>+ Claim settlements</TxButton>
+            <TxButton method="claim" args={[]} onDone={reload}>
+              + Claim settlements
+            </TxButton>
             <p className="mt-3 text-[12px] text-mute">
               Payouts are pull-only, so nothing is ever pushed to an address that cannot receive it.
             </p>

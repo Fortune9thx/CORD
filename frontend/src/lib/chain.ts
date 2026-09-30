@@ -7,6 +7,8 @@
 
 import { CHAIN_ID, CONTRACT_ADDRESS, RPC_URL, isTargetChain } from "./config";
 import type { Grant, Review, UseRecord } from "./types";
+import { describeOutcome, needsFinality } from "./tx";
+import type { TxOutcome } from "./tx";
 
 let rpcId = 1;
 
@@ -108,6 +110,22 @@ export async function getGrant(id: string): Promise<Grant | null> {
   return parseOrNull<Grant>(await read({ method: "get_grant", args: [id] }));
 }
 
+/**
+ * Has the contract issued this id at all?
+ *
+ * A far cheaper question than reading the grant, and it distinguishes
+ * "still finalizing" from "never existed" — the contract numbers ids
+ * sequentially, so `get_config`'s next_id bounds what can exist.
+ */
+export async function grantIdWasIssued(id: string): Promise<boolean> {
+  const m = /^g(\d+)$/.exec(id.trim());
+  if (!m) return false;
+  const cfg = await getConfig();
+  const next = Number(cfg?.next_id ?? 1);
+  const n = Number(m[1]);
+  return Number.isFinite(n) && n >= 1 && n < next;
+}
+
 export async function getChildren(id: string): Promise<string[]> {
   return parseOrNull<string[]>(await read({ method: "get_children", args: [id] })) ?? [];
 }
@@ -173,14 +191,50 @@ export async function listGrants(limit = 60): Promise<Grant[]> {
  * Writes — injected wallet
  * ---------------------------------------------------------------------- */
 
+/**
+ * Resolve the wallet provider.
+ *
+ * `window.ethereum` alone is not the wallet — with several extensions
+ * installed it is whichever one won the race, and wrappers such as
+ * WalletConnect, Coinbase Smart Wallet and Safe may not be there at all.
+ * EIP-6963 lets each wallet announce itself, so prefer an announced provider
+ * and fall back to the injected one only when nothing answers.
+ */
+let announced: any[] = [];
+
+if (typeof window !== "undefined") {
+  window.addEventListener("eip6963:announceProvider", (event: any) => {
+    const detail = event?.detail;
+    if (!detail?.provider) return;
+    if (!announced.some((p) => p.provider === detail.provider)) {
+      announced.push(detail);
+    }
+  });
+  window.dispatchEvent(new Event("eip6963:requestProvider"));
+}
+
+/** Providers the user could pick between, newest announcement first. */
+export function availableWallets(): { name: string; provider: any }[] {
+  const list = announced.map((d) => ({
+    name: d.info?.name ?? "Injected wallet",
+    provider: d.provider,
+  }));
+  const injected = (window as any)?.ethereum;
+  if (injected && !list.some((w) => w.provider === injected)) {
+    list.push({ name: "Injected wallet", provider: injected });
+  }
+  return list;
+}
+
 function eth(): any {
-  const e = (window as any).ethereum;
-  if (!e) throw new Error("no injected wallet found");
-  return e;
+  const wallets = availableWallets();
+  if (!wallets.length) throw new Error("no wallet found");
+  return wallets[0].provider;
 }
 
 export function hasWallet(): boolean {
-  return typeof window !== "undefined" && Boolean((window as any).ethereum);
+  if (typeof window === "undefined") return false;
+  return availableWallets().length > 0;
 }
 
 export async function connect(): Promise<string> {
@@ -225,11 +279,26 @@ export async function ensureChain(): Promise<void> {
   }
 }
 
-export async function write(
-  method: string,
-  args: unknown[],
-  value = 0n,
-): Promise<string> {
+/**
+ * Poll budget.
+ *
+ * Matches the GenLayer CLI's own `receipt` default (100 attempts x 5s).
+ * FINALIZED has been observed several minutes past ACCEPTED, so a budget tuned
+ * for ACCEPTED reproduces the exact "stuck" symptom it was meant to fix.
+ */
+const POLL_ATTEMPTS = 100;
+const POLL_INTERVAL_MS = 5_000;
+
+/**
+ * Leader retry attempts before a round reports a timeout.
+ *
+ * The platform default is 3. CORD's judgments are nondet-heavy — each
+ * validator independently re-fetches evidence and re-runs the model — so one
+ * slow attempt has more room to exhaust the default budget.
+ */
+const CONSENSUS_MAX_ROTATIONS = 6;
+
+async function writeClient() {
   if (!CONTRACT_ADDRESS) throw new Error("contract address is not configured");
   await ensureChain();
   const account = await connect();
@@ -240,11 +309,76 @@ export async function write(
     rpcUrls: { default: { http: [RPC_URL] } },
     nativeCurrency: { name: "GEN", symbol: "GEN", decimals: 18 },
   };
-  const client = gl.createClient({ chain, endpoint: RPC_URL, account });
+  // Hand the client the provider we resolved, not whatever it would pick.
+  return gl.createClient({ chain, endpoint: RPC_URL, account, provider: eth() });
+}
+
+/** Submit a write and return its hash. The hash alone proves nothing. */
+export async function write(
+  method: string,
+  args: unknown[],
+  value = 0n,
+): Promise<string> {
+  const client = await writeClient();
   return client.writeContract({
     address: CONTRACT_ADDRESS,
     functionName: method,
     args,
     value,
+    consensusMaxRotations: CONSENSUS_MAX_ROTATIONS,
   });
+}
+
+/** Fetch a transaction's current receipt, or null while it is not yet visible. */
+export async function getReceipt(hash: string): Promise<any | null> {
+  try {
+    return await rpc<any>("eth_getTransactionByHash", [hash]);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Submit a write and follow it to a settled outcome.
+ *
+ * The hash is reported immediately so the UI can show a real confirming state,
+ * then polled. Polling stops only on an outcome `describeOutcome` marks
+ * settled, so the stop condition is derived from the same classification the
+ * success check uses — two separate lists would drift apart and throw away a
+ * genuinely successful transaction the moment it reached an intermediate
+ * status.
+ */
+export async function writeAndConfirm(
+  method: string,
+  args: unknown[],
+  value = 0n,
+  onProgress?: (hash: string, outcome: TxOutcome) => void,
+): Promise<{ hash: string; outcome: TxOutcome }> {
+  const hash = await write(method, args, value);
+  const requireFinalized = needsFinality(method);
+
+  let outcome = describeOutcome(null, requireFinalized);
+  onProgress?.(hash, outcome);
+
+  for (let i = 0; i < POLL_ATTEMPTS; i++) {
+    await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
+    const receipt = await getReceipt(hash);
+    outcome = describeOutcome(receipt, requireFinalized);
+    onProgress?.(hash, outcome);
+    if (outcome.settled) return { hash, outcome };
+  }
+
+  // Ran out of budget without a settled answer. That is not success.
+  return {
+    hash,
+    outcome: {
+      ...outcome,
+      state: "unknown",
+      ok: false,
+      settled: false,
+      title: "Still not confirmed",
+      detail:
+        "The transaction did not reach a settled state within the polling budget. It may still land — check the explorer before retrying.",
+    },
+  };
 }

@@ -118,7 +118,7 @@ cd frontend && npm install && npm run dev
 
 Tests run on plain CPython: `cordlib` imports nothing from GenLayer, and
 `tests/fake_genlayer.py` supplies a small GenVM stand-in that reproduces the two
-behaviours safety depends on — `run_nondet_default` raising when the validator
+behaviours safety depends on — `strict_eq` raising when the validator
 disagrees, and each side fetching evidence independently.
 
 ## License

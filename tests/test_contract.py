@@ -710,3 +710,40 @@ def test_negative_bond_is_refused_at_deploy(gl, cord):
     gl.message.sender_address = gl.types.Address(BOSS)
     with pytest.raises(gl.vm.UserError):
         cord.Cord(treasury=TREASURY, review_bond=-1)
+
+
+# --- equivalence primitive: fail-closed on a non-answer ---------------------
+
+
+def test_empty_agreed_value_is_retryable_not_authority(ctx, monkeypatch):
+    """An equivalence principle can return "" when validators don't converge.
+
+    json.loads("") raises, so the parse must never be reached with an empty
+    value — it has to fail closed instead.
+    """
+    root = make_root(ctx)
+    child = propose(ctx, root)
+    monkeypatch.setattr(ctx.gl.eq_principle, "strict_eq", lambda fn: "")
+    ctx.as_(AGENT, value=10**16)
+    ctx.c.request_review(child)
+    assert ctx.grant(child)["status"] == ST_RETRYABLE
+    assert ctx.claimable(AGENT) == 10**16
+
+
+def test_garbage_agreed_value_is_retryable(ctx, monkeypatch):
+    root = make_root(ctx)
+    child = propose(ctx, root)
+    monkeypatch.setattr(ctx.gl.eq_principle, "strict_eq", lambda fn: "not json")
+    ctx.as_(AGENT, value=10**16)
+    ctx.c.request_review(child)
+    assert ctx.grant(child)["status"] == ST_RETRYABLE
+
+
+def test_empty_agreed_value_on_prove_use_is_inconclusive(ctx, monkeypatch):
+    _, child = active_child(ctx)
+    ctx.nondet.web[EV] = (200, b"x")
+    monkeypatch.setattr(ctx.gl.eq_principle, "strict_eq", lambda fn: "")
+    ctx.as_(SUB, value=5 * 10**15)
+    uid = ctx.c.prove_use(child, "Paid an invoice", [EV])
+    assert ctx.use(uid)["decision"] == INCONCLUSIVE
+    assert ctx.claimable(SUB) == 5 * 10**15

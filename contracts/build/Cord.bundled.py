@@ -1,23 +1,4 @@
 # { "Depends": "py-genlayer:5jycge4q8k23462jtb0b9fyey1s9qz928sz2nbrd9mg4sxqg2qng" }
-"""CORD — Constraint On Recursive Delegation.
-
-An authority lattice for agents. A child grant may only ever narrow its parent,
-and CORD settles that question two ways:
-
-  SEMANTIC REVIEW  after deterministic subset checks pass, validators judge each
-                   natural-language clause pair as NARROWER_OR_EQUAL,
-                   EXPANDS_AUTHORITY or AMBIGUOUS.
-  PROVE_USE        given an ACTIVE grant and HTTPS evidence URLs, validators
-                   independently fetch the evidence and decide WITHIN_SCOPE,
-                   OUT_OF_SCOPE or INCONCLUSIVE.
-
-Bonds make a false verdict expensive; `can_invoke` fails closed.
-
-State is kept as JSON documents in TreeMaps rather than nested storage
-dataclasses. Grants are read and written whole, never field-by-field, so a
-single document is the natural unit; it also keeps the storage surface flat
-enough to reason about in an audit.
-"""
 
 import json
 
@@ -94,7 +75,7 @@ TERMINAL_STATUSES = (ST_DENIED, ST_REVOKED, ST_EXPIRED)
 
 
 class CordError(Exception):
-    """Stable, lowercase, machine-comparable rejection reason."""
+    pass
 
 
 def fail(reason):
@@ -107,11 +88,6 @@ def fail(reason):
 
 
 def canon_verdict(raw):
-    """Map arbitrary model output onto a review verdict.
-
-    Fails closed: anything unrecognized becomes UNVERIFIABLE, which is inactive
-    and retryable and is never treated as authority.
-    """
     if not isinstance(raw, str):
         return UNVERIFIABLE
     v = raw.strip().upper().replace("-", "_").replace(" ", "_")
@@ -130,10 +106,6 @@ def canon_verdict(raw):
 
 
 def canon_use_decision(raw):
-    """Map arbitrary model output onto a prove_use decision.
-
-    Fails closed: unrecognized output is INCONCLUSIVE, never WITHIN_SCOPE.
-    """
     if not isinstance(raw, str):
         return INCONCLUSIVE
     v = raw.strip().upper().replace("-", "_").replace(" ", "_")
@@ -149,11 +121,6 @@ def canon_use_decision(raw):
 
 
 def normalize_token(raw):
-    """Normalize a capability or resource token.
-
-    Case-folded, NFKC-normalized, whitespace-collapsed. Tokens are compared as
-    opaque strings plus an explicit `*` wildcard and `a.b.*` prefix form.
-    """
     if not isinstance(raw, str):
         fail("token must be a string")
     t = unicodedata.normalize("NFKC", raw).strip().lower()
@@ -166,12 +133,6 @@ def normalize_token(raw):
 
 
 def normalize_clause_text(raw):
-    """Normalize clause text for digesting.
-
-    Aggressive enough that cosmetic edits (whitespace, quotes, case, trailing
-    punctuation) do not unlock a LOCKED ambiguous clause pair, but preserving
-    every word so that a material rewording does.
-    """
     if not isinstance(raw, str):
         fail("clause text must be a string")
     t = unicodedata.normalize("NFKC", raw)
@@ -193,11 +154,6 @@ def normalize_clause_text(raw):
 
 
 def token_covers(parent_token, child_token):
-    """Does a single parent token authorize a single child token?
-
-    `*` covers everything. `a.b.*` covers `a.b` and anything beneath it.
-    Otherwise tokens must be equal. No other widening is implied.
-    """
     if parent_token == "*":
         return True
     if parent_token == child_token:
@@ -209,7 +165,6 @@ def token_covers(parent_token, child_token):
 
 
 def set_covers(parent_tokens, child_tokens):
-    """Every child token must be covered by at least one parent token."""
     return [c for c in child_tokens if not any(token_covers(p, c) for p in parent_tokens)]
 
 
@@ -230,7 +185,6 @@ def normalize_token_set(raw_list, label, limit):
 
 
 def normalize_clauses(raw_list):
-    """Normalize a clause list into [{id, text}] with stable ordering."""
     if raw_list is None:
         return []
     if not isinstance(raw_list, (list, tuple)):
@@ -265,13 +219,6 @@ def normalize_clauses(raw_list):
 
 
 def check_structural_subset(parent, child):
-    """Deterministic gate that runs *before* any LLM is consulted.
-
-    Returns a list of stable lowercase violation strings. Empty means the
-    structured scope is a subset and the proposal may proceed to semantic
-    review. A non-empty list means objective widening, which is rejected
-    without spending any non-determinism.
-    """
     v = []
 
     missing_caps = set_covers(parent["capabilities"], child["capabilities"])
@@ -309,11 +256,6 @@ def _digest(payload):
 
 
 def clause_pair_digest(parent_clauses, child_clauses):
-    """Digest of the normalized clause text on both sides of a review.
-
-    Only the *text* matters: re-proposing the identical wording under a new
-    grant id produces the same digest and therefore hits the same lock.
-    """
     return _digest({
         "parent": sorted(normalize_clause_text(c["text"]) for c in parent_clauses),
         "child": sorted(normalize_clause_text(c["text"]) for c in child_clauses),
@@ -321,13 +263,6 @@ def clause_pair_digest(parent_clauses, child_clauses):
 
 
 def lock_fingerprint(parent_id, parent_version, parent_clauses, child_clauses):
-    """Identity of a clause-pair that AMBIGUOUS locks.
-
-    Bound to the parent id *and* its version, so a delegator who materially
-    revises the parent (bumping its version) or the child text gets a fresh
-    fingerprint and may retry. Cosmetic edits normalize to the same digest and
-    stay locked.
-    """
     return _digest({
         "parent_id": parent_id,
         "parent_version": parent_version,
@@ -336,7 +271,6 @@ def lock_fingerprint(parent_id, parent_version, parent_clauses, child_clauses):
 
 
 def scope_fingerprint(grant):
-    """Stable identity of a grant's full enforceable scope."""
     return _digest({
         "capabilities": grant["capabilities"],
         "resources": grant["resources"],
@@ -351,13 +285,6 @@ def scope_fingerprint(grant):
 
 
 def review_comparable(raw):
-    """Project a raw review result onto the fields validators must agree on.
-
-    Must match: overall verdict class, the set of clause ids flagged as
-    expanding, the set flagged as ambiguous, and whether every parent
-    prohibition was addressed. Reasoning prose and raw model text are excluded
-    on purpose — validators are allowed to explain themselves differently.
-    """
     if not isinstance(raw, dict):
         return {
             "verdict": UNVERIFIABLE,
@@ -404,11 +331,6 @@ def reviews_equivalent(leader, validator):
 
 
 def use_comparable(raw):
-    """Project a raw prove_use result onto the agreed fields.
-
-    Only the decision and the set of clause ids said to be violated are
-    compared; the narrative is free.
-    """
     if not isinstance(raw, dict):
         return {"decision": INCONCLUSIVE, "violated_ids": []}
     decision = canon_use_decision(raw.get("decision"))
@@ -432,6 +354,10 @@ def uses_equivalent(leader, validator):
 # ---------------------------------------------------------------------------
 
 _HOST_RE = re.compile(r"^[a-z0-9.-]+$")
+# A host that is entirely numeric (decimal, hex or octal) is an IP in disguise.
+_NUMERIC_HOST_RE = re.compile(r"^(0[xX][0-9a-fA-F]+|[0-9]+)$")
+# Any bare dotted-quad, public or not: evidence must name a domain.
+_DOTTED_IP_RE = re.compile(r"^[0-9]{1,3}(\.[0-9]{1,3}){3}$")
 _PRIVATE_HOST_RE = re.compile(
     r"^("
     r"localhost|"
@@ -446,12 +372,6 @@ _PRIVATE_HOST_RE = re.compile(
 
 
 def normalize_evidence_url(raw):
-    """Accept only plain public HTTPS URLs.
-
-    Rejects non-HTTPS schemes, credentials in the authority, non-default ports,
-    and loopback/private/link-local hosts, so evidence fetching cannot be aimed
-    at validator-internal services.
-    """
     if not isinstance(raw, str):
         fail("evidence url must be a string")
     u = raw.strip()
@@ -475,7 +395,15 @@ def normalize_evidence_url(raw):
         fail("evidence url host is invalid")
     if _PRIVATE_HOST_RE.fullmatch(host):
         fail("evidence url host is not public")
+    # A bare number is a packed IPv4 address: 2130706433 resolves to 127.0.0.1,
+    # and 0x7f000001 / 017700000001 are the same address in other bases. Reject
+    # them by shape rather than relying on the dotted-domain check below to
+    # catch them incidentally.
+    if _NUMERIC_HOST_RE.fullmatch(host):
+        fail("evidence url host is not a public domain")
     if "." not in host:
+        fail("evidence url host is not a public domain")
+    if _DOTTED_IP_RE.fullmatch(host):
         fail("evidence url host is not a public domain")
     return u
 
@@ -501,11 +429,6 @@ def normalize_evidence_urls(raw_list):
 
 
 def split_slash(amount, fee_bps):
-    """Split a slashed bond into (beneficiary, treasury).
-
-    Integer-exact: the two parts always re-add to `amount`, so no wei is ever
-    created or stranded by rounding.
-    """
     if amount < 0:
         fail("amount must not be negative")
     if fee_bps < 0 or fee_bps > BPS_DENOM:
@@ -515,12 +438,6 @@ def split_slash(amount, fee_bps):
 
 
 def settle_review(verdict, bond, fee_bps):
-    """Who gets the review bond after a settled review.
-
-    EXPANDS_AUTHORITY slashes it (delegator tried to widen). NARROWER_OR_EQUAL
-    returns it. AMBIGUOUS returns it — an unclear clause is not fraud.
-    UNVERIFIABLE returns it — a technical failure is never charged for.
-    """
     if verdict == EXPANDS_AUTHORITY:
         to_treasury_pool, treasury = split_slash(bond, fee_bps)
         return {"refund": 0, "slashed": bond, "beneficiary": to_treasury_pool, "treasury": treasury}
@@ -528,12 +445,6 @@ def settle_review(verdict, bond, fee_bps):
 
 
 def settle_challenge(verdict, bond, fee_bps):
-    """Who gets the challenge bond after a re-review of an ACTIVE grant.
-
-    A challenger who proves expansion is refunded and paid the beneficiary
-    share; a challenger who was wrong is slashed. Ambiguous and unverifiable
-    re-reviews refund without payout.
-    """
     if verdict == EXPANDS_AUTHORITY:
         return {"refund": bond, "slashed": 0, "upheld": True}
     if verdict in (AMBIGUOUS, UNVERIFIABLE):
@@ -549,11 +460,6 @@ def settle_challenge(verdict, bond, fee_bps):
 
 
 def settle_use(decision, bond, fee_bps):
-    """Who gets the use bond after prove_use.
-
-    OUT_OF_SCOPE slashes. WITHIN_SCOPE and INCONCLUSIVE both return it —
-    an agent is never charged for a validator's failure to reach evidence.
-    """
     if decision == OUT_OF_SCOPE:
         beneficiary, treasury = split_slash(bond, fee_bps)
         return {"refund": 0, "slashed": bond, "beneficiary": beneficiary, "treasury": treasury}
@@ -566,7 +472,6 @@ def settle_use(decision, bond, fee_bps):
 
 
 def status_after_review(verdict):
-    """Map a settled review verdict onto the child's new status."""
     if verdict == NARROWER_OR_EQUAL:
         return ST_ACTIVE
     if verdict == EXPANDS_AUTHORITY:
@@ -577,10 +482,6 @@ def status_after_review(verdict):
 
 
 def grant_effective(grant, now):
-    """Is this single grant effective, ignoring its ancestors?
-
-    Fails closed: only an explicitly ACTIVE, unexpired, untainted grant passes.
-    """
     if grant is None:
         return False, "grant not found"
     if grant["status"] != ST_ACTIVE:
@@ -593,12 +494,6 @@ def grant_effective(grant, now):
 
 
 def chain_effective(grant_id, lookup, now, max_depth=MAX_DEPTH):
-    """Walk to the root, requiring every ancestor to be effective.
-
-    Revoking a parent therefore instantly de-authorizes its whole subtree with
-    no bookkeeping. Returns (ok, reason). Fails closed on a missing ancestor or
-    a cycle.
-    """
     seen = set()
     cur = grant_id
     hops = 0
@@ -622,13 +517,6 @@ def chain_effective(grant_id, lookup, now, max_depth=MAX_DEPTH):
 
 
 def can_invoke(grant_id, actor, capability, resource, lookup, now):
-    """Fail-closed authority check.
-
-    Every one of these must hold: the grant exists, the actor is its grantee,
-    the capability and resource are inside its own scope, and every grant from
-    here to the root is effective. Anything else, including any internal
-    inconsistency, is a denial with a stable reason.
-    """
     g = lookup(grant_id)
     if g is None:
         return False, "grant not found"
@@ -676,11 +564,6 @@ _FENCE_RE = re.compile(r"[`\u0000-\u0008\u000b\u000c\u000e-\u001f]")
 
 
 def strip_html(raw):
-    """Reduce a fetched page to plain text.
-
-    Script and style bodies are dropped entirely rather than flattened, since
-    their contents are never evidence and are a favourite injection vector.
-    """
     if isinstance(raw, bytes):
         try:
             raw = raw.decode("utf-8", "replace")
@@ -697,12 +580,6 @@ def strip_html(raw):
 
 
 def sanitize_untrusted(raw, limit):
-    """Make hostile text safe to embed in a fenced prompt block.
-
-    Backticks and control characters are removed so the text cannot close the
-    fence it is placed in, and the result is truncated to a fixed budget so one
-    oversized page cannot crowd out the rules.
-    """
     if not isinstance(raw, str):
         raw = str(raw)
     t = _FENCE_RE.sub(" ", raw)
@@ -713,7 +590,6 @@ def sanitize_untrusted(raw, limit):
 
 
 def normalize_evidence(url, status, body):
-    """Normalize one fetched evidence document into a prompt-ready record."""
     text = strip_html(body) if status == 200 else ""
     return {
         "url": url,
@@ -756,12 +632,6 @@ def _clause_block(label, clauses):
 
 
 def build_review_prompt(parent, child):
-    """Prompt for the SEMANTIC REVIEW judgment.
-
-    The structured subset check has already passed by the time this is built,
-    so the only open question is whether the natural-language clauses narrow or
-    widen the parent's authority.
-    """
     return (
         "You are adjudicating a delegation of authority. A parent grant has "
         "delegated a subset of its powers to a child grant. The machine-checkable "
@@ -809,7 +679,6 @@ def build_review_prompt(parent, child):
 
 
 def build_use_prompt(grant, action, evidence):
-    """Prompt for the PROVE_USE judgment."""
     ev_lines = []
     for i, e in enumerate(evidence):
         ev_lines.append(f"--- evidence {i + 1} ---")
@@ -862,19 +731,33 @@ DEFAULT_USE_BOND = 0               # opt-in by default
 DEFAULT_FEE_BPS = 1000             # 10% of a slash to the treasury
 
 
+# The two fail-closed results. Every judgment failure — no consensus, an
+# unreachable model, an empty or unparseable agreed value — lands on one of
+# these. Neither confers authority and neither is ever charged for.
+_UNVERIFIABLE_RESULT = {
+    "verdict": UNVERIFIABLE,
+    "expansion_ids": [],
+    "ambiguity_ids": [],
+    "prohibitions_covered": False,
+}
+_INCONCLUSIVE_RESULT = {"decision": INCONCLUSIVE, "violated_ids": []}
+
+
+def _parse_agreed(agreed, fallback):
+    if not isinstance(agreed, str) or not agreed.strip():
+        return dict(fallback)
+    try:
+        parsed = json.loads(agreed)
+    except Exception:
+        return dict(fallback)
+    return parsed if isinstance(parsed, dict) else dict(fallback)
+
+
 def _err(reason):
-    """Raise a stable, lowercase, machine-comparable user error."""
     raise gl.vm.UserError(reason)
 
 
 def _to_address(value):
-    """Coerce a constructor argument into an Address, or None if unset.
-
-    Deploy tooling infers argument types from their shape, so a 40-hex treasury
-    can arrive already decoded as an Address rather than as the `str` this
-    parameter is annotated with. Handling both means a deploy cannot revert in
-    the constructor over an encoding detail.
-    """
     if value is None or value == "":
         return None
     if isinstance(value, Address):
@@ -883,7 +766,6 @@ def _to_address(value):
 
 
 def _guard(fn):
-    """Run pure-lib code, translating its CordError into a GenVM user error."""
     try:
         return fn()
     except CordError as e:
@@ -948,11 +830,9 @@ class Cord(gl.contract.Contract):
         self.grants[grant["id"]] = json.dumps(grant, sort_keys=True)
 
     def _lookup(self):
-        """A `lookup` callable for the pure-lib chain walker."""
         return lambda gid: self._load(gid)
 
     def _credit(self, addr: str, amount: int) -> None:
-        """Owe wei to an address. Never pushes funds — claim() pulls."""
         if amount <= 0:
             return
         key = addr.lower()
@@ -971,7 +851,6 @@ class Cord(gl.contract.Contract):
         return f"{prefix}{n}"
 
     def _effective_status(self, grant: dict) -> str:
-        """Status as seen from now — ACTIVE grants past expiry read EXPIRED."""
         if grant["status"] == ST_ACTIVE and grant["expiry"] <= self._now():
             return ST_EXPIRED
         return grant["status"]
@@ -989,11 +868,6 @@ class Cord(gl.contract.Contract):
         expiry: int,
         clauses: list = None,
     ) -> str:
-        """Create a root grant. The sender is its grantor and its own authority.
-
-        A root is ACTIVE immediately: there is no parent to be narrower than, so
-        there is nothing for validators to settle.
-        """
         caps = _guard(lambda: normalize_token_set(capabilities, "capabilities", MAX_CAPABILITIES))
         res = _guard(lambda: normalize_token_set(resources, "resources", MAX_RESOURCES))
         cls = _guard(lambda: normalize_clauses(clauses))
@@ -1035,14 +909,6 @@ class Cord(gl.contract.Contract):
         expiry: int,
         clauses: list = None,
     ) -> str:
-        """Propose a narrower child of a grant the sender holds.
-
-        Every objective widening is rejected here, before any validator is
-        asked to think: capability and resource sets must be covered by the
-        parent, depth must be exactly one deeper and within the cap, and expiry
-        must not outlast the parent. A proposal that clears these checks is
-        stored as PROPOSED — it confers no authority until a review settles.
-        """
         parent = self._load(parent_id)
         if parent is None:
             _err("parent grant not found")
@@ -1114,14 +980,6 @@ class Cord(gl.contract.Contract):
         expiry: int,
         clauses: list = None,
     ) -> str:
-        """Rewrite a settled-but-inactive child and bump its version.
-
-        This is the escape hatch from AMBIGUOUS and DENIED: the delegator
-        rewrites the text, the version increments, and the proposal returns to
-        PROPOSED for a fresh review. Rewriting to the *same* normalized text
-        still hits the same lock, so this cannot be used to grind a stuck
-        clause pair.
-        """
         grant = self._load(grant_id)
         if grant is None:
             _err("grant not found")
@@ -1168,11 +1026,6 @@ class Cord(gl.contract.Contract):
 
     @gl.public.write
     def revoke(self, grant_id: str) -> None:
-        """Revoke a grant. Its whole subtree stops being effective at once.
-
-        No subtree bookkeeping is needed: `can_invoke` walks to the root on
-        every check, so a revoked ancestor denies every descendant immediately.
-        """
         grant = self._load(grant_id)
         if grant is None:
             _err("grant not found")
@@ -1190,11 +1043,6 @@ class Cord(gl.contract.Contract):
 
     @gl.public.write.payable
     def request_review(self, grant_id: str) -> None:
-        """Post the review bond and settle a proposed child in one call.
-
-        The verdict is produced by validators from the *stored* parent and
-        child text — nothing about the judgment comes from the caller.
-        """
         grant = self._load(grant_id)
         if grant is None:
             _err("grant not found")
@@ -1248,14 +1096,6 @@ class Cord(gl.contract.Contract):
 
     @gl.public.write.payable
     def challenge(self, grant_id: str) -> None:
-        """Challenge an ACTIVE grant by re-running the review, under bond.
-
-        If the re-review finds expansion the child is revoked and the challenger
-        is paid from the grantor's side; if it still reads as narrower, the
-        challenger's bond is slashed. An ambiguous or unverifiable re-review
-        refunds the challenger and leaves the grant alone — a challenge is not
-        a way to freeze someone's authority for free.
-        """
         grant = self._load(grant_id)
         if grant is None:
             _err("grant not found")
@@ -1308,12 +1148,6 @@ class Cord(gl.contract.Contract):
 
     @gl.public.write.payable
     def prove_use(self, grant_id: str, action: str, evidence_urls: list) -> str:
-        """Submit an action plus HTTPS evidence and have validators judge it.
-
-        Each validator fetches the evidence itself; the leader's fetched bytes
-        are never trusted as the record. A fetch failure yields INCONCLUSIVE,
-        never approval.
-        """
         grant = self._load(grant_id)
         if grant is None:
             _err("grant not found")
@@ -1367,7 +1201,6 @@ class Cord(gl.contract.Contract):
 
     @gl.public.write
     def clear_taint(self, grant_id: str) -> None:
-        """Let a grantor lift a taint after handling an out-of-scope use."""
         grant = self._load(grant_id)
         if grant is None:
             _err("grant not found")
@@ -1384,11 +1217,6 @@ class Cord(gl.contract.Contract):
 
     @gl.public.write
     def claim(self) -> int:
-        """Withdraw everything owed to the sender.
-
-        Pull-only and zeroed before the transfer, so nothing is ever pushed to
-        an address that cannot receive it and no balance is double-spent.
-        """
         key = self._sender()
         amount = int(self.claimable.get(key, 0))
         if amount <= 0:
@@ -1402,47 +1230,29 @@ class Cord(gl.contract.Contract):
     # ------------------------------------------------------------------
 
     def _judge_review(self, parent: dict, child: dict) -> dict:
-        """Run the SEMANTIC REVIEW judgment under validator consensus.
-
-        Both sides build the prompt from stored state and canonicalize the
-        model's answer through the same pure function, so agreement is decided
-        on the verdict class and the flagged clause-id sets — never on prose.
-        """
         prompt = build_review_prompt(parent, child)
 
-        def leader() -> str:
+        def judge() -> str:
             raw = gl.nondet.exec_prompt(prompt, response_format="json")
             return json.dumps(review_comparable(_safe_json(raw)), sort_keys=True)
 
-        def validator(leader_result: str) -> bool:
-            raw = gl.nondet.exec_prompt(prompt, response_format="json")
-            mine = review_comparable(_safe_json(raw))
-            try:
-                theirs = json.loads(leader_result)
-            except Exception:
-                return False
-            return mine == theirs
-
         try:
-            agreed = gl.vm.run_nondet_default(leader, validator)
-            return json.loads(agreed)
+            # strict_eq runs `judge` on the leader and again, independently, on
+            # each validator, then requires the results to be identical. The
+            # canonicalization inside `judge` is what makes that viable: raw
+            # model prose would never match, but a verdict class plus sorted
+            # clause-id sets matches exactly when the judgments agree. The
+            # platform performs the reconciliation, so no comparison logic of
+            # ours sits between the validators and their verdict.
+            agreed = gl.eq_principle.strict_eq(judge)
+            return _parse_agreed(agreed, _UNVERIFIABLE_RESULT)
         except Exception:
             # No consensus, or the judgment could not be run at all. That is a
             # technical failure, not a finding: UNVERIFIABLE is inactive and
             # retryable and never confers authority.
-            return {
-                "verdict": UNVERIFIABLE,
-                "expansion_ids": [],
-                "ambiguity_ids": [],
-                "prohibitions_covered": False,
-            }
+            return dict(_UNVERIFIABLE_RESULT)
 
     def _judge_use(self, grant: dict, action: str, urls: list) -> dict:
-        """Run the PROVE_USE judgment under validator consensus.
-
-        Each side fetches the evidence independently — the leader's bytes are
-        an input to its own opinion only.
-        """
 
         def fetch_all() -> list:
             out = []
@@ -1454,30 +1264,21 @@ class Cord(gl.contract.Contract):
                     out.append(normalize_evidence(u, 0, b""))
             return out
 
-        def leader() -> str:
+        def judge() -> str:
+            # Runs on the leader and, independently, inside every validator —
+            # so each one fetches the evidence itself. The leader's bytes are
+            # an input to the leader's own opinion and nothing more.
             evidence = fetch_all()
             raw = gl.nondet.exec_prompt(
                 build_use_prompt(grant, action, evidence), response_format="json"
             )
             return json.dumps(use_comparable(_safe_json(raw)), sort_keys=True)
 
-        def validator(leader_result: str) -> bool:
-            evidence = fetch_all()
-            raw = gl.nondet.exec_prompt(
-                build_use_prompt(grant, action, evidence), response_format="json"
-            )
-            mine = use_comparable(_safe_json(raw))
-            try:
-                theirs = json.loads(leader_result)
-            except Exception:
-                return False
-            return mine == theirs
-
         try:
-            agreed = gl.vm.run_nondet_default(leader, validator)
-            return json.loads(agreed)
+            agreed = gl.eq_principle.strict_eq(judge)
+            return _parse_agreed(agreed, _INCONCLUSIVE_RESULT)
         except Exception:
-            return {"decision": INCONCLUSIVE, "violated_ids": []}
+            return dict(_INCONCLUSIVE_RESULT)
 
     # ------------------------------------------------------------------
     # views
@@ -1535,11 +1336,6 @@ class Cord(gl.contract.Contract):
     def can_invoke(
         self, grant_id: str, actor: str, capability: str, resource: str
     ) -> str:
-        """The authority question, answered fail-closed.
-
-        Denies on a missing grant, an actor who is not the grantee, a capability
-        or resource outside scope, a taint, an expiry, or any inactive ancestor.
-        """
         allowed, reason = can_invoke(
             grant_id, actor, capability, resource, self._lookup(), self._now()
         )
@@ -1555,7 +1351,6 @@ class Cord(gl.contract.Contract):
 
 
 def _safe_json(raw):
-    """Parse model output without ever letting a parse failure become authority."""
     if isinstance(raw, dict):
         return raw
     if isinstance(raw, bytes):

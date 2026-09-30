@@ -3,7 +3,9 @@
 import { useState } from "react";
 import type { ReactNode } from "react";
 
+import { writeAndConfirm } from "../lib/chain";
 import { MAX_CLAUSES } from "../lib/limits";
+import type { TxOutcome } from "../lib/tx";
 import { useIsLive } from "./Chrome";
 
 export type Clause = { id: string; text: string };
@@ -114,33 +116,70 @@ export const parseTokens = (raw: string): string[] =>
 /**
  * A submit button that refuses to pretend.
  *
- * Writes are disabled unless the contract is confirmed live, and the result of
- * the last attempt is shown verbatim rather than summarised as "success".
+ * Writes are disabled until the contract is confirmed live. After submitting,
+ * it follows the transaction to a settled outcome and only then reports what
+ * happened — a hash is not a result, and a transaction that executed can still
+ * have persisted nothing if validators disagreed.
+ *
+ * `onDone` runs before success is shown, so the page reflects the new state by
+ * the time the user reads that it worked.
  */
 export function TxButton({
-  onRun,
+  method,
+  args,
+  value = 0n,
+  onDone,
   children,
   disabled,
 }: {
-  onRun: () => Promise<string>;
+  method: string;
+  args: unknown[] | (() => unknown[]);
+  value?: bigint;
+  onDone?: () => Promise<void> | void;
   children: ReactNode;
   disabled?: boolean;
 }) {
   const live = useIsLive();
   const [busy, setBusy] = useState(false);
-  const [result, setResult] = useState<{ ok: boolean; text: string } | null>(null);
+  const [hash, setHash] = useState<string | null>(null);
+  const [outcome, setOutcome] = useState<TxOutcome | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const run = async () => {
     setBusy(true);
-    setResult(null);
+    setError(null);
+    setOutcome(null);
+    setHash(null);
     try {
-      setResult({ ok: true, text: await onRun() });
+      const resolved = typeof args === "function" ? args() : args;
+      const { hash: h, outcome: o } = await writeAndConfirm(
+        method,
+        resolved,
+        value,
+        (progressHash, progressOutcome) => {
+          setHash(progressHash);
+          setOutcome(progressOutcome);
+        },
+      );
+      setHash(h);
+      // Refresh the page's data *before* reporting success, so the user never
+      // reads "confirmed" above state that has not caught up.
+      if (o.ok && onDone) await onDone();
+      setOutcome(o);
     } catch (e) {
-      setResult({ ok: false, text: e instanceof Error ? e.message : String(e) });
+      setError(e instanceof Error ? e.message : String(e));
     } finally {
       setBusy(false);
     }
   };
+
+  const tone = !outcome
+    ? "border-slate-200 bg-slate-50 text-ink"
+    : outcome.ok
+      ? "border-emerald-100 bg-emerald-50 text-emerald-900"
+      : outcome.settled
+        ? "border-rose-100 bg-rose-50 text-rose-900"
+        : "border-sky-100 bg-sky-50 text-sky-900";
 
   return (
     <div>
@@ -151,7 +190,7 @@ export function TxButton({
         className="btn-primary"
         title={live ? undefined : "The contract is not live on Studio Dev"}
       >
-        {busy ? "Submitting…" : children}
+        {busy ? (outcome?.state === "confirming" ? "Confirming…" : "Submitting…") : children}
       </button>
 
       {!live && (
@@ -160,18 +199,29 @@ export function TxButton({
         </p>
       )}
 
-      {result && (
-        <div
-          className={`mt-4 rounded-xl border p-4 text-[13px] ${
-            result.ok
-              ? "border-emerald-100 bg-emerald-50 text-emerald-900"
-              : "border-rose-100 bg-rose-50 text-rose-900"
-          }`}
-        >
+      {error && (
+        <div className="mt-4 rounded-xl border border-rose-100 bg-rose-50 p-4 text-[13px] text-rose-900">
           <p className="text-[11px] font-bold uppercase tracking-[0.1em] opacity-70">
-            {result.ok ? "Submitted" : "Rejected"}
+            Could not submit
           </p>
-          <p className="mt-1.5 break-words font-mono text-[12px]">{result.text}</p>
+          <p className="mt-1.5 break-words font-mono text-[12px]">{error}</p>
+        </div>
+      )}
+
+      {outcome && (
+        <div className={`mt-4 rounded-xl border p-4 text-[13px] ${tone}`}>
+          <div className="flex items-center gap-2">
+            {!outcome.settled && (
+              <span className="h-3 w-3 shrink-0 animate-spin rounded-full border-2 border-current/30 border-t-current" />
+            )}
+            <p className="text-[11px] font-bold uppercase tracking-[0.1em] opacity-70">
+              {outcome.title}
+            </p>
+          </div>
+          <p className="mt-1.5 leading-relaxed">{outcome.detail}</p>
+          {hash && (
+            <p className="mt-2 break-all font-mono text-[11px] opacity-70">{hash}</p>
+          )}
         </div>
       )}
     </div>

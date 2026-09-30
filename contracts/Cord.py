@@ -41,6 +41,34 @@ DEFAULT_USE_BOND = 0               # opt-in by default
 DEFAULT_FEE_BPS = 1000             # 10% of a slash to the treasury
 
 
+# The two fail-closed results. Every judgment failure — no consensus, an
+# unreachable model, an empty or unparseable agreed value — lands on one of
+# these. Neither confers authority and neither is ever charged for.
+_UNVERIFIABLE_RESULT = {
+    "verdict": UNVERIFIABLE,
+    "expansion_ids": [],
+    "ambiguity_ids": [],
+    "prohibitions_covered": False,
+}
+_INCONCLUSIVE_RESULT = {"decision": INCONCLUSIVE, "violated_ids": []}
+
+
+def _parse_agreed(agreed, fallback):
+    """Read back what the validators agreed on, failing closed.
+
+    An equivalence principle can return an empty string when the validators do
+    not converge, so `json.loads` is never reached with an empty value — that
+    path returns the fail-closed result instead of raising.
+    """
+    if not isinstance(agreed, str) or not agreed.strip():
+        return dict(fallback)
+    try:
+        parsed = json.loads(agreed)
+    except Exception:
+        return dict(fallback)
+    return parsed if isinstance(parsed, dict) else dict(fallback)
+
+
 def _err(reason):
     """Raise a stable, lowercase, machine-comparable user error."""
     raise gl.vm.UserError(reason)
@@ -589,32 +617,25 @@ class Cord(gl.contract.Contract):
         """
         prompt = build_review_prompt(parent, child)
 
-        def leader() -> str:
+        def judge() -> str:
             raw = gl.nondet.exec_prompt(prompt, response_format="json")
             return json.dumps(review_comparable(_safe_json(raw)), sort_keys=True)
 
-        def validator(leader_result: str) -> bool:
-            raw = gl.nondet.exec_prompt(prompt, response_format="json")
-            mine = review_comparable(_safe_json(raw))
-            try:
-                theirs = json.loads(leader_result)
-            except Exception:
-                return False
-            return mine == theirs
-
         try:
-            agreed = gl.vm.run_nondet_default(leader, validator)
-            return json.loads(agreed)
+            # strict_eq runs `judge` on the leader and again, independently, on
+            # each validator, then requires the results to be identical. The
+            # canonicalization inside `judge` is what makes that viable: raw
+            # model prose would never match, but a verdict class plus sorted
+            # clause-id sets matches exactly when the judgments agree. The
+            # platform performs the reconciliation, so no comparison logic of
+            # ours sits between the validators and their verdict.
+            agreed = gl.eq_principle.strict_eq(judge)
+            return _parse_agreed(agreed, _UNVERIFIABLE_RESULT)
         except Exception:
             # No consensus, or the judgment could not be run at all. That is a
             # technical failure, not a finding: UNVERIFIABLE is inactive and
             # retryable and never confers authority.
-            return {
-                "verdict": UNVERIFIABLE,
-                "expansion_ids": [],
-                "ambiguity_ids": [],
-                "prohibitions_covered": False,
-            }
+            return dict(_UNVERIFIABLE_RESULT)
 
     def _judge_use(self, grant: dict, action: str, urls: list) -> dict:
         """Run the PROVE_USE judgment under validator consensus.
@@ -633,30 +654,21 @@ class Cord(gl.contract.Contract):
                     out.append(normalize_evidence(u, 0, b""))
             return out
 
-        def leader() -> str:
+        def judge() -> str:
+            # Runs on the leader and, independently, inside every validator —
+            # so each one fetches the evidence itself. The leader's bytes are
+            # an input to the leader's own opinion and nothing more.
             evidence = fetch_all()
             raw = gl.nondet.exec_prompt(
                 build_use_prompt(grant, action, evidence), response_format="json"
             )
             return json.dumps(use_comparable(_safe_json(raw)), sort_keys=True)
 
-        def validator(leader_result: str) -> bool:
-            evidence = fetch_all()
-            raw = gl.nondet.exec_prompt(
-                build_use_prompt(grant, action, evidence), response_format="json"
-            )
-            mine = use_comparable(_safe_json(raw))
-            try:
-                theirs = json.loads(leader_result)
-            except Exception:
-                return False
-            return mine == theirs
-
         try:
-            agreed = gl.vm.run_nondet_default(leader, validator)
-            return json.loads(agreed)
+            agreed = gl.eq_principle.strict_eq(judge)
+            return _parse_agreed(agreed, _INCONCLUSIVE_RESULT)
         except Exception:
-            return {"decision": INCONCLUSIVE, "violated_ids": []}
+            return dict(_INCONCLUSIVE_RESULT)
 
     # ------------------------------------------------------------------
     # views

@@ -11,6 +11,7 @@ import Grants from "./pages/Grants";
 import Home from "./pages/Home";
 import NewGrant from "./pages/NewGrant";
 import Prove from "./pages/Prove";
+import Revise from "./pages/Revise";
 
 function ScrollToTop() {
   const { pathname } = useLocation();
@@ -33,6 +34,7 @@ export default function App() {
           <Route path="/app/grants/:id" element={<GrantDetail />} />
           <Route path="/app/delegate/:id" element={<Delegate />} />
           <Route path="/app/prove/:id" element={<Prove />} />
+          <Route path="/app/revise/:id" element={<Revise />} />
           <Route path="/app/checks" element={<Checks />} />
           <Route path="/app/activity" element={<Activity />} />
           <Route path="*" element={<Navigate to="/" replace />} />

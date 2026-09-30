@@ -401,6 +401,10 @@ def uses_equivalent(leader, validator):
 # ---------------------------------------------------------------------------
 
 _HOST_RE = re.compile(r"^[a-z0-9.-]+$")
+# A host that is entirely numeric (decimal, hex or octal) is an IP in disguise.
+_NUMERIC_HOST_RE = re.compile(r"^(0[xX][0-9a-fA-F]+|[0-9]+)$")
+# Any bare dotted-quad, public or not: evidence must name a domain.
+_DOTTED_IP_RE = re.compile(r"^[0-9]{1,3}(\.[0-9]{1,3}){3}$")
 _PRIVATE_HOST_RE = re.compile(
     r"^("
     r"localhost|"
@@ -444,7 +448,15 @@ def normalize_evidence_url(raw):
         fail("evidence url host is invalid")
     if _PRIVATE_HOST_RE.fullmatch(host):
         fail("evidence url host is not public")
+    # A bare number is a packed IPv4 address: 2130706433 resolves to 127.0.0.1,
+    # and 0x7f000001 / 017700000001 are the same address in other bases. Reject
+    # them by shape rather than relying on the dotted-domain check below to
+    # catch them incidentally.
+    if _NUMERIC_HOST_RE.fullmatch(host):
+        fail("evidence url host is not a public domain")
     if "." not in host:
+        fail("evidence url host is not a public domain")
+    if _DOTTED_IP_RE.fullmatch(host):
         fail("evidence url host is not a public domain")
     return u
 

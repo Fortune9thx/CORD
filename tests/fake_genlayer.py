@@ -175,6 +175,27 @@ def _make_modules():
 
     vm_mod.run_nondet_default = run_nondet_default
 
+    # eq_principle — the platform's own equivalence primitives.
+    eq_mod = types.ModuleType("genlayer.eq_principle")
+
+    def strict_eq(fn):
+        """Run `fn` on the leader and again, independently, on the validator.
+
+        Reproduces the two behaviours the contract's safety rests on: the
+        validator executes the same function itself (so evidence is re-fetched
+        rather than taken from the leader), and a mismatch raises instead of
+        silently resolving to the leader's answer.
+        """
+        if control.force_exception:
+            raise RuntimeError("nondet unavailable")
+        leader_result = fn()
+        validator_result = fn()
+        if leader_result != validator_result:
+            raise RuntimeError("validators did not reach consensus")
+        return leader_result
+
+    eq_mod.strict_eq = strict_eq
+
     # nondet
     nondet_mod = types.ModuleType("genlayer.nondet")
     nondet_mod.web = _Web(control)
@@ -226,22 +247,25 @@ def _make_modules():
     gl.contract = contract_mod
     gl.public = public
     gl.vm = vm_mod
+    gl.eq_principle = eq_mod
     gl.nondet = nondet_mod
     gl.evm = evm_mod
     gl.types = types_mod
     gl.message = _Message
     gl.block = _Block
 
-    return gl, types_mod, contract_mod, vm_mod, nondet_mod, evm_mod, control, chain
+    return gl, types_mod, contract_mod, vm_mod, nondet_mod, evm_mod, eq_mod, control, chain
 
 
 def install():
     """Register the fake modules in sys.modules and return the test controls."""
-    gl, types_mod, contract_mod, vm_mod, nondet_mod, evm_mod, control, chain = _make_modules()
+    (gl, types_mod, contract_mod, vm_mod, nondet_mod,
+     evm_mod, eq_mod, control, chain) = _make_modules()
     sys.modules["genlayer"] = gl
     sys.modules["genlayer.types"] = types_mod
     sys.modules["genlayer.contract"] = contract_mod
     sys.modules["genlayer.vm"] = vm_mod
     sys.modules["genlayer.nondet"] = nondet_mod
     sys.modules["genlayer.evm"] = evm_mod
+    sys.modules["genlayer.eq_principle"] = eq_mod
     return gl, control, chain

@@ -1,6 +1,6 @@
 /** Grant detail: scope, clauses, the settled verdict, uses, and the actions. */
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 
 import { useHealth } from "../components/Chrome";
@@ -17,7 +17,7 @@ import {
   TokenList,
   VerdictPill,
 } from "../components/ui";
-import { getChildren, getGrant, getReview, getUse, getUses, write } from "../lib/chain";
+import { getChildren, getGrant, getReview, getUse, getUses, grantIdWasIssued } from "../lib/chain";
 import { fmtDate, fmtDateTime, fmtGen, relativeExpiry, shortAddr } from "../lib/format";
 import type { Grant, Review, UseRecord } from "../lib/types";
 
@@ -25,46 +25,71 @@ export default function GrantDetail() {
   const { id = "" } = useParams();
   const health = useHealth();
 
-  const [grant, setGrant] = useState<Grant | null | "missing">(null);
+  const [grant, setGrant] = useState<Grant | null | "missing" | "finalizing">(null);
   const [review, setReview] = useState<Review | null>(null);
   const [children, setChildren] = useState<string[]>([]);
   const [uses, setUses] = useState<UseRecord[]>([]);
   const [error, setError] = useState("");
 
-  useEffect(() => {
+  /** Exposed so a settled write refreshes this page before reporting success. */
+  const reload = useCallback(async () => {
     if (health.state === "checking") return;
-    if (health.state !== "live") return setGrant("missing");
-
-    let alive = true;
-    (async () => {
-      try {
-        const g = await getGrant(id);
-        if (!alive) return;
-        if (!g) return setGrant("missing");
-        setGrant(g);
-
-        const [r, kids, useIds] = await Promise.all([
-          getReview(id).catch(() => null),
-          getChildren(id).catch(() => []),
-          getUses(id).catch(() => []),
-        ]);
-        if (!alive) return;
-        setReview(r);
-        setChildren(kids);
-
-        const records = await Promise.all(useIds.map((u) => getUse(u).catch(() => null)));
-        if (alive) setUses(records.filter((u): u is UseRecord => Boolean(u)));
-      } catch (e) {
-        if (alive) setError(e instanceof Error ? e.message : String(e));
+    if (health.state !== "live") {
+      setGrant("missing");
+      return;
+    }
+    try {
+      const g = await getGrant(id);
+      if (!g) {
+        // A direct read failing does not mean the grant never existed — a
+        // freshly created one can be unreadable while it finalizes. Ask a
+        // cheaper source whether the contract has issued this id at all, and
+        // only call it missing when both say no.
+        const issued = await grantIdWasIssued(id).catch(() => false);
+        setGrant(issued ? "finalizing" : "missing");
+        return;
       }
-    })();
-    return () => {
-      alive = false;
-    };
+      setGrant(g);
+
+      const [r, kids, useIds] = await Promise.all([
+        getReview(id).catch(() => null),
+        getChildren(id).catch(() => []),
+        getUses(id).catch(() => []),
+      ]);
+      setReview(r);
+      setChildren(kids);
+
+      const records = await Promise.all(useIds.map((u) => getUse(u).catch(() => null)));
+      setUses(records.filter((u): u is UseRecord => Boolean(u)));
+      setError("");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
   }, [id, health.state]);
+
+  useEffect(() => {
+    void reload();
+  }, [reload]);
 
   if (error) return <Section className="py-8"><ErrorNote error={error} /></Section>;
   if (grant === null) return <Section className="py-8"><Spinner /></Section>;
+  if (grant === "finalizing")
+    return (
+      <Section className="py-8">
+        <div className="card p-10 text-center">
+          <span className="mx-auto mb-4 block h-6 w-6 animate-spin rounded-full border-2 border-slate-200 border-t-brand" />
+          <p className="text-[15px] font-bold text-ink">Finalizing on chain</p>
+          <p className="mx-auto mt-1.5 max-w-md text-sm text-mute">
+            The contract has issued <span className="font-mono">{id}</span>, but it is not
+            readable yet. This is normal shortly after creation.
+          </p>
+          <button onClick={() => void reload()} className="btn-ghost mt-6">
+            Check again
+          </button>
+        </div>
+      </Section>
+    );
+
   if (grant === "missing")
     return (
       <Section className="py-8">
@@ -117,6 +142,11 @@ export default function GrantDetail() {
                   Prove a use
                 </Link>
               </>
+            )}
+            {["AMBIGUOUS", "DENIED", "RETRYABLE"].includes(grant.status) && (
+              <Link to={`/app/revise/${grant.id}`} className="btn-primary">
+                <Plus /> Revise
+              </Link>
             )}
           </div>
         </div>
@@ -262,20 +292,34 @@ export default function GrantDetail() {
 
         <div className="mt-8 flex flex-wrap gap-3 border-t border-slate-100 pt-7">
           {grant.status === "PROPOSED" && (
-            <TxButton onRun={() => write("request_review", [grant.id], 10n ** 16n)}>
+            <TxButton
+              method="request_review"
+              args={[grant.id]}
+              value={10n ** 16n}
+              onDone={reload}
+            >
               + Request review (0.01 GEN bond)
             </TxButton>
           )}
           {grant.effective_status === "ACTIVE" && grant.parent_id && (
-            <TxButton onRun={() => write("challenge", [grant.id], 2n * 10n ** 16n)}>
+            <TxButton
+              method="challenge"
+              args={[grant.id]}
+              value={2n * 10n ** 16n}
+              onDone={reload}
+            >
               + Challenge (0.02 GEN bond)
             </TxButton>
           )}
           {grant.status !== "REVOKED" && (
-            <TxButton onRun={() => write("revoke", [grant.id])}>Revoke</TxButton>
+            <TxButton method="revoke" args={[grant.id]} onDone={reload}>
+              Revoke
+            </TxButton>
           )}
           {grant.tainted && (
-            <TxButton onRun={() => write("clear_taint", [grant.id])}>Clear taint</TxButton>
+            <TxButton method="clear_taint" args={[grant.id]} onDone={reload}>
+              Clear taint
+            </TxButton>
           )}
         </div>
       </div>

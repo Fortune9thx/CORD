@@ -496,3 +496,19 @@ def test_can_invoke_denies_when_an_ancestor_is_revoked():
     world = _world(_g("root", status=ST_REVOKED), _g("c", parent="root", depth=1))
     allowed, _ = can_invoke("c", "0xagent", "payments.send", "acct.ops", world, NOW)
     assert not allowed
+
+
+@pytest.mark.parametrize(
+    "bad",
+    [
+        "https://2130706433/x",        # decimal-packed 127.0.0.1
+        "https://0x7f000001/x",        # hex-packed 127.0.0.1
+        "https://017700000001/x",      # octal-packed 127.0.0.1
+        "https://8.8.8.8/x",           # a public IP is still not a domain
+        "https://1.2.3.4/x",
+    ],
+)
+def test_numeric_and_ip_hosts_rejected(bad):
+    """An IP in any encoding is not a domain, so it is not acceptable evidence."""
+    with pytest.raises(CordError):
+        normalize_evidence_url(bad)

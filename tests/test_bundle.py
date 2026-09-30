@@ -21,6 +21,13 @@ DEPENDS = (
 # a folk number; see docs/STATUS.md for what was actually observed on deploy.
 SIZE_LIMIT = 4 * 1024 * 1024
 
+# Bradbury has an empirical deploy wall a little above 50KB of encoded payload
+# (confirmed three times across prior builds, once at a ~32-byte margin). Raw
+# source and encoded payload are not directly comparable, so this is a trim
+# trigger rather than the wall itself: crossing it means measure the real
+# payload before deploying.
+TRIM_TRIGGER = 50 * 1024
+
 
 def build():
     subprocess.run(
@@ -63,17 +70,41 @@ def test_no_sibling_imports_survive_bundling():
         assert not s.startswith("import cordlib"), "sibling import would fail validation"
 
 
-def test_judgment_uses_the_safe_nondet_entry_point():
+def test_judgment_reconciles_through_a_platform_equivalence_primitive():
+    """Both judgments must go through gl.eq_principle, not hand-rolled logic.
+
+    A validator that makes its own free-standing non-deterministic call and
+    reconciles it in contract Python is rejected by GenVM's own protocol even
+    when the results agree. The platform primitive reconciles instead.
+    """
     src = build().decode("utf-8")
-    assert "run_nondet_default" in src
-    # `run_nondet` is the unsafe variant; it must not appear except as the
-    # prefix of the safe name.
-    assert src.count("run_nondet") == src.count("run_nondet_default")
+    assert src.count("gl.eq_principle.strict_eq") == 2, (
+        "both _judge_review and _judge_use must use the equivalence primitive"
+    )
+    # Neither run_nondet nor its _default variant should be called directly:
+    # the primitive uses them internally, but contract code must not.
+    assert "run_nondet" not in src
 
 
 def test_bundle_is_within_the_size_limit():
     raw = build()
     assert len(raw) < SIZE_LIMIT, "bundle exceeds the GenVM contract size limit"
+
+
+def test_bundle_stays_under_the_deploy_trim_trigger():
+    raw = build()
+    assert len(raw) < TRIM_TRIGGER, (
+        f"bundle is {len(raw)} bytes, over the {TRIM_TRIGGER}-byte trim trigger; "
+        "measure the real encoded deploy payload before shipping"
+    )
+
+
+def test_docstrings_are_stripped_from_the_bundle_only():
+    """The deployable file drops docstrings; the source keeps every one."""
+    src = build().decode("utf-8")
+    source_file = (ROOT / "contracts" / "cordlib" / "core.py").read_text(encoding="utf-8")
+    assert "Fail-closed authority check" in source_file
+    assert "Fail-closed authority check" not in src
 
 
 def test_bundle_carries_the_pure_logic_it_needs():

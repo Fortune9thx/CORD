@@ -6,7 +6,7 @@ import { useParams } from "react-router-dom";
 import { useHealth } from "../components/Chrome";
 import { FormCard, TxButton } from "../components/Forms";
 import { Empty, Section, Spinner, TokenList } from "../components/ui";
-import { getGrant, write } from "../lib/chain";
+import { getGrant } from "../lib/chain";
 import { MAX_ACTION_CHARS, MAX_EVIDENCE_URLS } from "../lib/limits";
 import type { Grant } from "../lib/types";
 
@@ -127,7 +127,11 @@ export default function Prove() {
             )}
           </div>
 
-          <TxButton disabled={!ready} onRun={() => write("prove_use", [id, action.trim(), clean])}>
+          <TxButton
+            disabled={!ready}
+            method="prove_use"
+            args={() => [id, action.trim(), clean]}
+          >
             + Submit for judgment
           </TxButton>
 
