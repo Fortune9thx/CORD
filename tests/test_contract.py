@@ -39,9 +39,9 @@ NEARER = NOW + 10 * 86_400
 
 
 def _set_now(gl, ts):
-    """Move the fake chain clock. The contract reads gl.vm.get_timestamp()."""
+    """Move the fake chain clock. The contract reads gl.message.datetime."""
     import datetime as dt
-    gl.vm.get_timestamp = lambda: dt.datetime.fromtimestamp(ts, tz=dt.UTC)
+    gl.message.datetime = dt.datetime.fromtimestamp(ts, tz=dt.UTC).isoformat()
 
 
 @pytest.fixture

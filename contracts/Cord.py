@@ -19,6 +19,7 @@ single document is the natural unit; it also keeps the storage surface flat
 enough to reason about in an audit.
 """
 
+import datetime
 import json
 
 import genlayer as gl
@@ -166,9 +167,20 @@ class Cord(gl.contract.Contract):
     # ------------------------------------------------------------------
 
     def _now(self) -> int:
-        # There is no gl.block in the v0.3 runner -- verified against the live
-        # VM, not the docs. gl.vm.get_timestamp() returns a datetime.
-        return int(gl.vm.get_timestamp().timestamp())
+        """Current time, in whole seconds.
+
+        Three candidates were tried against the live v0.3 runner, in this
+        order: gl.block.timestamp does not exist at all; gl.vm.get_timestamp()
+        exists but raises SystemError: 2: inval when actually called on chain.
+        gl.message.datetime is the one that works. It is also the right source
+        on the merits -- it is part of the message, so every validator
+        re-executing this call sees the identical value, where a VM clock
+        would not be guaranteed to.
+        """
+        raw = str(gl.message.datetime).strip()
+        if raw.endswith("Z"):
+            raw = raw[:-1] + "+00:00"
+        return int(datetime.datetime.fromisoformat(raw).timestamp())
 
     def _sender(self) -> str:
         return gl.message.sender_address.as_hex.lower()

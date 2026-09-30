@@ -11,7 +11,6 @@ called independently by each side — so consensus failure and evidence
 re-fetching are exercised rather than assumed.
 """
 
-import datetime as _dt
 import sys
 import types
 
@@ -60,6 +59,9 @@ class Address:
 class _Message:
     sender_address = Address("0x" + "11" * 20)
     value = 0
+    # The contract reads the time from here. gl.block does not exist and
+    # gl.vm.get_timestamp() raises on chain; this is what actually works.
+    datetime = "2023-11-14T22:13:20+00:00"
 
 
 class _Clock:
@@ -167,8 +169,6 @@ def _make_modules():
     # vm
     vm_mod = types.ModuleType("genlayer.vm")
     vm_mod.UserError = UserError
-    vm_mod.get_timestamp = lambda: _dt.datetime.fromtimestamp(
-        _Clock.now, tz=_dt.UTC)
 
     def run_nondet_default(leader_fn, validator_fn):
         if control.force_exception:

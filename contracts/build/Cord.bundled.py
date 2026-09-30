@@ -1,5 +1,6 @@
 # { "Depends": "py-genlayer:5jycge4q8k23462jtb0b9fyey1s9qz928sz2nbrd9mg4sxqg2qng" }
 
+import datetime
 import json
 
 import genlayer as gl
@@ -833,9 +834,10 @@ class Cord(gl.contract.Contract):
     # ------------------------------------------------------------------
 
     def _now(self) -> int:
-        # There is no gl.block in the v0.3 runner -- verified against the live
-        # VM, not the docs. gl.vm.get_timestamp() returns a datetime.
-        return int(gl.vm.get_timestamp().timestamp())
+        raw = str(gl.message.datetime).strip()
+        if raw.endswith("Z"):
+            raw = raw[:-1] + "+00:00"
+        return int(datetime.datetime.fromisoformat(raw).timestamp())
 
     def _sender(self) -> str:
         return gl.message.sender_address.as_hex.lower()
