@@ -15,6 +15,8 @@ python contracts\build_bundle.py
 python -m pytest tests\ -q
 python -m ruff check contracts tests
 $env:PYTHONIOENCODING = "utf-8"
+$env:GENVM_ALLOW_PRERELEASE = "1"
+$env:GENVM_VERSION = "v0.6.0-rc8"
 genvm-lint contracts\build\Cord.bundled.py
 ```
 
@@ -22,6 +24,13 @@ genvm-lint contracts\build\Cord.bundled.py
 bundles from the pre-split `genlayerlabs/genvm` repository, where the
 `v0.6.0-rc*` tags do not exist and every download 404s. `0.11.1rc2` reads
 `genlayerlabs/genvm-manager`, which is where they live.
+
+`GENVM_VERSION` is pinned to `v0.6.0-rc8` because the contract's `Depends` pin
+(`py-genlayer:5jycge4q...`) must be present in the runner bundle or validation
+fails with `runner ... not found`. The manager ships each release under a fixed
+digest: rc6, rc7 and rc8 are all `bd30580f...`, which carries the pin; the rc9
+asset was later republished to rc10's content (`d3c6ba36...`), which dropped it.
+So rc8 is the newest bundle that still ships the SDK the contract declares.
 
 `contracts/build/Cord.bundled.py` is generated. Edit `contracts/Cord.py` or
 `contracts/cordlib/*.py` and rebuild; CI fails on a stale bundle.

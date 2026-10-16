@@ -22,7 +22,10 @@ Redeployed on GenLayer Studio Dev (chain 61997) at
 - CI: `genvm-lint check` is a blocking gate (`GENVM_VERSION` pinned), no longer
   `continue-on-error`. `genvm-linter` is pinned to `0.11.1rc2`: 0.11.0 resolves
   runner bundles from the pre-split `genlayerlabs/genvm` repository, where the
-  `v0.6.0-rc*` tags do not exist and every download 404s.
+  `v0.6.0-rc*` tags do not exist and every download 404s. The runner is pinned
+  to `v0.6.0-rc8`. The rc9 asset was later republished to rc10's content, which
+  dropped the contract's `py-genlayer:5jycge4q...` runner, so rc8 is the newest
+  bundle that still ships it.
 - Frontend: a non-activating `prohibitions_covered: false` review and an
   `evidence_ok: false` use are shown explicitly rather than as ordinary states.
 

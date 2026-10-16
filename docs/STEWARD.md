@@ -130,8 +130,13 @@ to reach a conclusion. Payouts are pull-only via `claim()`.
 python contracts\build_bundle.py
 python -m pytest tests\ -q
 python -m ruff check contracts tests
+$env:GENVM_ALLOW_PRERELEASE = "1"
+$env:GENVM_VERSION = "v0.6.0-rc8"
 genvm-lint contracts\build\Cord.bundled.py
 ```
+
+`GENVM_VERSION` is pinned to the runner bundle that ships the contract's
+`Depends` pin; see [`docs/DEPLOY.md`](DEPLOY.md) for why rc8 and not the latest.
 
 The bundle is generated and CI fails if the committed copy is stale, so the
 sha256 in `deploy/deployments.json` can be reproduced from source.

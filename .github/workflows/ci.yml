@@ -38,16 +38,19 @@ jobs:
         run: python3 -m pytest tests/ -q
 
       # Full GenVM validation against the pinned runner is a hard gate. The
-      # Depends pin (py-genlayer:5jycge4q...) is carried by the genvm-manager
-      # bundles through v0.6.0-rc9; v0.6.0-rc10 dropped it, so the manager
-      # version is pinned to the newest bundle that still ships it. A failed
-      # download, lint or validation blocks the build -- it cannot fail
-      # silently. PYTHONIOENCODING stops genvm-lint dying while writing its
-      # own check mark on a non-UTF-8 console.
+      # contract's Depends pin (py-genlayer:5jycge4q...) must be present in the
+      # runner bundle, or validation fails with "runner ... not found". The
+      # manager publishes each release's bundle under a fixed digest: rc6, rc7
+      # and rc8 all ship bd30580f... (which contains the pin), while the rc9
+      # asset was later republished to rc10's content, d3c6ba36..., which
+      # dropped it. So the pin tracks rc8 -- the newest bundle that still
+      # carries it. A failed download, lint or validation blocks the build; it
+      # cannot fail silently. PYTHONIOENCODING stops genvm-lint dying while
+      # writing its own check mark on a non-UTF-8 console.
       - name: Pre-download the pinned GenVM runner bundle
         env:
           PYTHONIOENCODING: utf-8
-          GENVM_VERSION: v0.6.0-rc9
+          GENVM_VERSION: v0.6.0-rc8
           GENVM_ALLOW_PRERELEASE: "1"
         run: genvm-lint download -v "$GENVM_VERSION"
 
@@ -59,7 +62,7 @@ jobs:
       - name: Contract validation against the pinned runner (blocking)
         env:
           PYTHONIOENCODING: utf-8
-          GENVM_VERSION: v0.6.0-rc9
+          GENVM_VERSION: v0.6.0-rc8
           GENVM_ALLOW_PRERELEASE: "1"
         run: genvm-lint check contracts/build/Cord.bundled.py
 

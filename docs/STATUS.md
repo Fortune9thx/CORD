@@ -57,8 +57,11 @@ python contracts\build_bundle.py
 python -m pytest tests\ -q
 python -m ruff check contracts tests
 $env:PYTHONIOENCODING = "utf-8"
+$env:GENVM_ALLOW_PRERELEASE = "1"
+$env:GENVM_VERSION = "v0.6.0-rc8"
 genvm-lint contracts\build\Cord.bundled.py
 ```
 
-CI fails on a stale bundle, on a failing test, and on a `genvm-lint check` that
-does not pass.
+`GENVM_VERSION` must be pinned to the runner bundle that ships the contract's
+`Depends` pin; see [`docs/DEPLOY.md`](DEPLOY.md). CI fails on a stale bundle, on
+a failing test, and on a `genvm-lint check` that does not pass.
