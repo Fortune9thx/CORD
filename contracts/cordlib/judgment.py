@@ -85,6 +85,16 @@ def normalize_evidence(url, status, body):
     }
 
 
+def all_evidence_available(evidence):
+    """Did every submitted evidence URL fetch successfully with a non-empty body?
+
+    `normalize_evidence` records this per URL as `ok`. All of them must be `ok`:
+    a verdict that rests on evidence that could not be read is not a verdict.
+    Empty input is not "all available".
+    """
+    return bool(evidence) and all(bool(e.get("ok")) for e in evidence)
+
+
 def normalize_action(raw):
     if not isinstance(raw, str) or not raw.strip():
         fail("action description is required")

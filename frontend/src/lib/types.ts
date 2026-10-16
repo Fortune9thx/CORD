@@ -61,6 +61,8 @@ export type UseRecord = {
   action: string;
   evidence_urls: string[];
   decision: UseDecision;
+  /** Deterministic evidence gate: false when any submitted URL was unreadable. */
+  evidence_ok?: boolean;
   violated_clause_ids: string[];
   bond: number;
   slashed: number;

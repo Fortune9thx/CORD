@@ -288,9 +288,20 @@ export default function GrantDetail() {
                 </span>
               </Field>
               <Field label="Prohibitions covered">
-                {review.prohibitions_covered ? "yes" : "no"}
+                <span className={review.prohibitions_covered ? "" : "font-semibold text-rose-700"}>
+                  {review.prohibitions_covered ? "yes" : "no — non-activating"}
+                </span>
               </Field>
             </div>
+
+            {!review.prohibitions_covered && (
+              <p className="mt-5 rounded-xl bg-amber-50 p-4 text-[13px] leading-relaxed text-amber-800 ring-1 ring-inset ring-amber-600/20">
+                This result did not cover every parent prohibition, so it is
+                <strong> non-activating</strong>: it cannot confer authority. The grant
+                stays inactive until a review settles with every parent prohibition
+                addressed.
+              </p>
+            )}
 
             {review.kind === "challenge" && (
               <p className="mt-5 text-[13px] text-mute">
@@ -377,6 +388,12 @@ export default function GrantDetail() {
                 {u.violated_clause_ids.length > 0 && (
                   <p className="mt-3 text-[12px] text-rose-700">
                     Violated: {u.violated_clause_ids.join(", ")}
+                  </p>
+                )}
+                {u.evidence_ok === false && (
+                  <p className="mt-1.5 text-[12px] text-amber-700">
+                    Evidence could not be fully retrieved — judged inconclusive, never
+                    approval.
                   </p>
                 )}
                 {u.slashed > 0 && (

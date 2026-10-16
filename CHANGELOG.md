@@ -2,6 +2,38 @@
 
 All notable changes to CORD. Dates are UTC.
 
+## [1.1.0] — 2026-10-16
+
+Redeployed on GenLayer Studio Dev (chain 61997) at
+`0x4e976D69483d4d1f8bb17dF23E2137436881A307`.
+
+### Changed — fail closed at the judgment edges
+
+- `review_comparable()` now forces `AMBIGUOUS` when the agreed verdict is
+  `NARROWER_OR_EQUAL` but `prohibitions_covered` is false. A child can only
+  activate when the review explicitly confirmed the parent's prohibitions
+  survived; a self-contradictory review no longer activates one.
+- PROVE_USE gained a deterministic evidence gate. `all_evidence_available()`
+  reports whether every submitted URL was fetched and returned a non-empty body;
+  it rides inside the `strict_eq` comparable as `evidence_ok`, and
+  `gate_use_by_evidence()` downgrades any substantive verdict to `INCONCLUSIVE`
+  unless every side agrees the evidence was readable. A failed fetch is never
+  approval. `prove_use` records now carry `evidence_ok`.
+- CI: `genvm-lint check` is a blocking gate (`GENVM_VERSION` pinned), no longer
+  `continue-on-error`.
+- Frontend: a non-activating `prohibitions_covered: false` review and an
+  `evidence_ok: false` use are shown explicitly rather than as ordinary states.
+
+### Live
+
+- A real nonzero bond (0.01 GEN) was posted, slashed on an `EXPANDS_AUTHORITY`
+  verdict, and credited 0.009 GEN to the parent's grantor and 0.001 GEN to the
+  treasury — verified on chain.
+- `claim()` executes and zeroes the ledger, but the outgoing value transfer is
+  skipped and refunded by Studio Dev (the emitted message declares a fee budget
+  of `0`). No GEN has left the contract. Recorded in
+  `deploy/deployments.json` and `docs/STATUS.md`.
+
 ## [1.0.0] — 2026-09-30
 
 First deployment. Live on GenLayer Studio Dev (chain 61997) at

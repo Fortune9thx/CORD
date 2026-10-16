@@ -337,6 +337,7 @@ def review_comparable(raw):
     verdict = canon_verdict(raw.get("verdict"))
     expansion = _id_set(raw.get("expansion_clause_ids"))
     ambiguity = _id_set(raw.get("ambiguity_clause_ids"))
+    prohibitions_covered = bool(raw.get("prohibitions_covered", False))
 
     # Keep the verdict and its evidence consistent, so a model cannot say
     # NARROWER while naming expanding clauses (or vice versa).
@@ -347,11 +348,22 @@ def review_comparable(raw):
     if verdict == NARROWER_OR_EQUAL and ambiguity:
         verdict = AMBIGUOUS
 
+    # Fail closed on incomplete prohibition coverage. An activating verdict whose
+    # own prohibition-coverage flag is false contradicts itself: the verdict says
+    # the child cannot exceed the parent while the flag says a parent prohibition
+    # is unaddressed. It arrives with no offending clause to name -- the same
+    # shape as an EXPANDS_AUTHORITY that names nothing, which this module already
+    # reads as AMBIGUOUS. So it does too. AMBIGUOUS confers no authority, refunds
+    # the bond (an unnamed deficiency is not fraud), and locks the clause pair so
+    # the same wording cannot be re-rolled until its text materially changes.
+    if verdict == NARROWER_OR_EQUAL and not prohibitions_covered:
+        verdict = AMBIGUOUS
+
     return {
         "verdict": verdict,
         "expansion_ids": expansion,
         "ambiguity_ids": ambiguity,
-        "prohibitions_covered": bool(raw.get("prohibitions_covered", False)),
+        "prohibitions_covered": prohibitions_covered,
     }
 
 
@@ -394,6 +406,23 @@ def use_comparable(raw):
 
 def uses_equivalent(leader, validator):
     return use_comparable(leader) == use_comparable(validator)
+
+
+def gate_use_by_evidence(result, all_evidence_ok):
+    """Deterministic evidence gate for a prove_use verdict.
+
+    A substantive decision -- WITHIN_SCOPE or OUT_OF_SCOPE -- is only meaningful
+    if every submitted evidence URL was actually fetched and returned a non-empty
+    body. The caller computes `all_evidence_ok` from its own fetches, inside the
+    non-deterministic path; this is the pure projection of that check.
+
+    If any required evidence is missing, unreadable or empty the judgment is
+    forced INCONCLUSIVE. A failed fetch is never approval, and never a slash.
+    """
+    decision = result.get("decision") if isinstance(result, dict) else None
+    if decision in (WITHIN_SCOPE, OUT_OF_SCOPE) and not all_evidence_ok:
+        return {"decision": INCONCLUSIVE, "violated_ids": []}
+    return result
 
 
 # ---------------------------------------------------------------------------

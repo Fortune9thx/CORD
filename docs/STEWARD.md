@@ -32,72 +32,86 @@ independent runs while genuinely equivalent judgments do.
 `UNVERIFIABLE` and `INCONCLUSIVE` are technical failures: inactive, refunded,
 retryable, never authority.
 
+## Steward hardening
+
+Two rules only ever mattered at the edge, where a judgment and its own evidence
+disagree. Both now fail closed.
+
+**A narrower verdict that admits it did not cover the prohibitions cannot
+activate.** `review_comparable()` forces `AMBIGUOUS` when the agreed verdict is
+`NARROWER_OR_EQUAL` and `prohibitions_covered` is false. Before this, a review
+could return `NARROWER_OR_EQUAL` while its own `prohibitions_covered` flag said
+the parent's prohibited actions were not shown to survive — and the child would
+activate anyway. A child now clears that bar only when the review explicitly
+confirms the prohibitions carried through.
+
+**A substantive PROVE_USE verdict rests on evidence that was actually read.**
+`judgment.all_evidence_available()` decides, deterministically, whether *every*
+submitted evidence URL was fetched and returned a non-empty body. That flag rides
+inside the `strict_eq` comparable as `evidence_ok`, and after consensus
+`core.gate_use_by_evidence()` downgrades any `WITHIN_SCOPE`/`OUT_OF_SCOPE` to
+`INCONCLUSIVE` unless it is true on every side. A fetch that fails, or a page
+with an empty body, can never become approval. `prove_use` records now carry
+`evidence_ok` so the fact is auditable after the run.
+
+Both rules are covered by adversarial contract tests, including the case where
+validators *agree* on a self-contradictory review.
+
 ## Live evidence
 
 | | |
 |---|---|
 | Network | GenLayer Studio Dev, chain 61997 |
-| Contract | `0x0dE4f140aD4Df0D3d24D645A86d4fd8B5769204d` |
-| Deploy tx | `0xafac0b6aadd7e4b5f3764ce932d0f0dec915f40c96f27ebe36d1c508c2890093` |
-| Consensus | `ACCEPTED`, leader execution `SUCCESS` |
-| Bundle | 51,116 bytes, sha256 in [`deploy/deployments.json`](../deploy/deployments.json) |
+| Contract | `0x4e976D69483d4d1f8bb17dF23E2137436881A307` |
+| Deploy tx | `0x7668d9ea87ec4ce6df2156c573d0009e07c8a101ce85df985e621b6bda669f66` |
+| Consensus | `FINALIZED` / `MAJORITY_AGREE`, leader execution `SUCCESS` |
+| Bundle | 44,323 bytes, sha256 in [`deploy/deployments.json`](../deploy/deployments.json) |
 
 Run against the live contract, not a mock. Full record, including the
 transaction hashes, in [`deploy/deployments.json`](../deploy/deployments.json).
 
-**Both judgments, both directions, on every write method.** Every one of
-CORD's nine write methods has now been exercised on chain — see
-`deploy/deployments.json` for the full list with transaction-level detail.
+**Both judgments, both directions.** The prior deployment had every one of
+CORD's nine write methods exercised on chain; this deployment re-proves the
+paths the steward fix touches.
 
 | Case | Verdict | Evidence |
 |---|---|---|
-| Child that genuinely narrows its parent | `NARROWER_OR_EQUAL` | `expansion_clause_ids: []`, `prohibitions_covered: true`, grant PROPOSED → ACTIVE |
-| Child that widens its parent in prose only | `EXPANDS_AUTHORITY` | `expansion_clause_ids: ["c0","c1"]`, `prohibitions_covered: false`, grant PROPOSED → **DENIED** |
-| Action proved against a real fetched page, within the grant | `WITHIN_SCOPE` | validators independently fetched the evidence URL |
-| Action that claimed a power the grant forbade, evidence contradicted it | `OUT_OF_SCOPE` | `violated_clause_ids: ["c0"]`, grant tainted, `can_invoke` denies with status still ACTIVE |
+| Child that widens its parent in prose only | `EXPANDS_AUTHORITY` | `expansion_clause_ids: ["c0","c1"]`, `prohibitions_covered: false`, grant PROPOSED → **DENIED**, bond slashed |
+| Real readable evidence page, action it does not establish | `INCONCLUSIVE` | `evidence_ok: true` — readable evidence is necessary, not sufficient |
+| Real unreachable evidence URL | `INCONCLUSIVE` | `evidence_ok: false` — the deterministic evidence flag computed live |
 
-The rejected child claimed both powers back in plain English while keeping a
-strict subset of the structured capabilities, so nothing but the prose
-distinguishes it — and consensus named both offending clauses by id, without
-being told which they were. The same field is empty for the honest case, so
-this is discrimination, not a contract that denies everything.
+**A nonzero bond really moves through the contract.** A 0.01 GEN review bond was
+posted with `msg.value`, an `EXPANDS_AUTHORITY` verdict slashed it in full, and
+the contract credited the split — 0.009 GEN to the parent's grantor and 0.001 GEN
+to the treasury, readable via `get_claimable`. The contract's own balance held
+0.02 GEN while both bonds were posted. This used `genlayer-py`'s
+`write_contract(value=...)`, which attaches `msg.value`; the CLI has no flag for
+it, which is why the earlier record could not show this.
 
-**The full AMBIGUOUS/DENIED escape hatch, live.** A DENIED proposal was
-revised — `revise_child` bumped its version, returned it to PROPOSED — and
-re-reviewed to `NARROWER_OR_EQUAL`, activating it. `challenge()` re-ran the
-review on that now-ACTIVE grant (`upheld: false`, the challenger's bond
-refunded, the grant unaffected). `prove_use` produced a real `OUT_OF_SCOPE`
-verdict and tainted a grant; `clear_taint()` lifted it and `can_invoke`
-returned to `allowed: true`. Every state transition the contract defines has
-now been observed on a real chain, not only in a mock.
-
-**The cheap check really does run first.** Proposing a child with a capability
-the parent does not hold reverted with `structural widening rejected:
-capability not covered by parent: admin`, and that transaction's `eq_outputs`
-was `{}` — zero non-deterministic calls. Objective widening never reaches a
-validator, so an attacker cannot burn validator time with obviously invalid
-proposals.
-
-**Authority is walked, never cached.** `can_invoke` on an active child
-returned allowed. After revoking its **root**, the same call returned
-`denied: ancestor g1: grant status is revoked`. The child's own status is
-still ACTIVE — the walk to the root is what denies it, and it says which
-ancestor.
+**The cheap check really does run first.** Proposing a child that widens its
+parent's structured scope still reverts deterministically, before any validator
+runs — the property the whole design rests on.
 
 ### What is not proven live
 
-`claim()` is the only path that moves GEN out of the contract, and every
-other write listed above credits only an internal ledger. The GenLayer CLI
-has no flag for attaching value to a payable call, so posting a real bond
-requires a browser wallet or a raw signing key; neither was used here. Every
-verdict above was produced on a second, identical deployment with all bonds
-set to zero (address in `deployments.json`), which runs the same judgment and
-settlement code for real with nothing at stake.
+**No GEN has actually left the contract.** `claim()` executes, returns success
+and zeroes the internal ledger, but the outgoing value transfer is skipped by the
+platform: the emitted message carries its own fee budget of `0`, so Studio Dev
+skips it and refunds the value inside the contract
+(`message_value_effects: {declaredBudget: 0, skipped: true, skippedRefunded: true}`).
+Attaching a Studio-estimated `messageAllocations` entry did not change this; the
+second claim finalized with `execution: SUCCESS` and the transfer was still
+skipped. After both claims the contract still held 0.02 GEN. The bond economics
+— a real nonzero credit — are now proven on chain; the *delivery* of that credit
+to an EOA is blocked by the platform, and that is where this record stops.
 
-An adverse verdict and the slash it implies are two different milestones. The
-verdicts, the state machine, and every write method are proven on chain. The
-bond economics — a real nonzero credit, and `claim()` actually paying it out
-— are proven by the test suite, not yet by an on-chain balance delta.
+The two steward downgrades are proven by the test suite, not by a live trigger.
+Forcing a model to return exactly `NARROWER_OR_EQUAL` + `prohibitions_covered
+false`, or `WITHIN_SCOPE` over evidence it could not read, is not reproducible on
+demand. Their plumbing is visible live (`prohibitions_covered` reads back,
+`evidence_ok` is computed true and false), but the specific downgrades were not
+forced on chain.
+
 
 ## Bonds
 

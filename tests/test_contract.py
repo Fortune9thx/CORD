@@ -362,6 +362,44 @@ def test_a_model_claiming_narrower_while_naming_expansions_cannot_activate(ctx):
     assert ctx.grant(child)["status"] == ST_DENIED
 
 
+def test_a_narrower_verdict_without_prohibition_coverage_cannot_activate(ctx):
+    """ADVERSARIAL: NARROWER_OR_EQUAL with prohibitions_covered=false.
+
+    The verdict claims the child cannot exceed the parent while its own flag
+    says a parent prohibition is unaddressed and it names no offending clause.
+    That is self-contradictory, so it must fail closed rather than activate.
+    """
+    root = make_root(ctx)
+    child = propose(ctx, root)
+    review(ctx, child, {
+        "verdict": NARROWER_OR_EQUAL,
+        "expansion_clause_ids": [],
+        "ambiguity_clause_ids": [],
+        "prohibitions_covered": False,
+        "reasoning": "reads as narrower, but I did not account for the prohibition",
+    })
+    g = ctx.grant(child)
+    assert g["status"] != ST_ACTIVE, "an inconsistent review must not confer authority"
+    assert g["status"] == ST_AMBIGUOUS
+    assert g["effective"] is False
+    assert ctx.invoke(child, SUB, "payments.send", "acct.ops")["allowed"] is False
+    assert ctx.claimable(AGENT) == 10**16, "an unnamed deficiency is not fraud; refund it"
+
+
+def test_an_agreeing_but_self_contradictory_review_still_fails_closed(ctx):
+    """Even when both sides return the same inconsistent result, no activation."""
+    root = make_root(ctx)
+    child = propose(ctx, root)
+    inconsistent = {
+        "verdict": NARROWER_OR_EQUAL,
+        "expansion_clause_ids": [],
+        "ambiguity_clause_ids": [],
+        "prohibitions_covered": False,
+    }
+    review(ctx, child, inconsistent, validator=inconsistent)
+    assert ctx.grant(child)["status"] == ST_AMBIGUOUS
+
+
 def test_review_bond_below_the_floor_is_refused(ctx):
     root = make_root(ctx)
     child = propose(ctx, root)
@@ -524,6 +562,51 @@ def test_unreachable_evidence_is_inconclusive_never_approval(ctx):
     uid = ctx.c.prove_use(child, "Paid an invoice", ["https://gone.example.com/x"])
     assert ctx.use(uid)["decision"] == INCONCLUSIVE
     assert ctx.claimable(SUB) == 5 * 10**15
+
+
+def test_one_unreadable_evidence_url_forces_inconclusive(ctx):
+    """EVIDENCE GATE: a substantive verdict needs every URL to be readable.
+
+    Here both sides agree on WITHIN_SCOPE, and one of the two URLs is readable
+    and shows a real invoice. The other cannot be fetched, so the judgment is
+    forced INCONCLUSIVE and the bond is refunded rather than treated as approval.
+    """
+    _, child = active_child(ctx)
+    good = "https://vendor.example.com/invoice/1"
+    bad = "https://missing.example.com/invoice/2"
+    ctx.nondet.web[good] = (200, b"<html>Cloud hosting invoice, $120</html>")
+    # No table entry for `bad`: its fetch raises on every side.
+    ctx.answer(WITHIN, validator=WITHIN)
+    ctx.as_(SUB, value=5 * 10**15)
+    uid = ctx.c.prove_use(child, "Paid a hosting invoice", [good, bad])
+    rec = ctx.use(uid)
+    assert rec["decision"] == INCONCLUSIVE
+    assert rec["evidence_ok"] is False
+    assert ctx.claimable(SUB) == 5 * 10**15, "missing evidence must refund the bond"
+    assert ctx.grant(child)["tainted"] is False
+
+
+def test_empty_evidence_body_forces_inconclusive(ctx):
+    """A 200 response with an empty body is not readable evidence."""
+    _, child = active_child(ctx)
+    ctx.nondet.web[EV] = (200, b"")
+    ctx.answer(WITHIN, validator=WITHIN)
+    ctx.as_(SUB, value=5 * 10**15)
+    uid = ctx.c.prove_use(child, "Paid an invoice", [EV])
+    assert ctx.use(uid)["decision"] == INCONCLUSIVE
+    assert ctx.claimable(SUB) == 5 * 10**15
+
+
+def test_all_readable_evidence_still_allows_a_substantive_verdict(ctx):
+    """The gate must not block a genuine WITHIN_SCOPE when the evidence loads."""
+    _, child = active_child(ctx)
+    ctx.nondet.web[EV] = (200, b"<html>Cloud hosting invoice, $120</html>")
+    ctx.answer(WITHIN, validator=WITHIN)
+    ctx.as_(SUB, value=5 * 10**15)
+    uid = ctx.c.prove_use(child, "Paid a hosting invoice", [EV])
+    assert ctx.use(uid)["decision"] == WITHIN_SCOPE
+    assert ctx.use(uid)["evidence_ok"] is True
+    assert ctx.claimable(SUB) == 5 * 10**15, "within-scope refunds the bond"
 
 
 def test_both_sides_fetch_the_evidence_independently(ctx):
@@ -696,6 +779,92 @@ def test_claiming_nothing_is_refused(ctx):
     ctx.as_(OUTSIDER)
     with pytest.raises(ctx.gl.vm.UserError):
         ctx.c.claim()
+
+
+# --- full bond / slash / claim lifecycle -----------------------------------
+
+
+def test_narrower_review_refunds_the_nonzero_bond_through_claim(ctx):
+    """A nonzero review bond is posted, refunded, and paid out by claim()."""
+    root = make_root(ctx)
+    child = propose(ctx, root)
+    bond = 10**16
+    review(ctx, child, NARROWER, bond=bond)
+    assert ctx.claimable(AGENT) == bond
+    ctx.as_(AGENT)
+    paid = ctx.c.claim()
+    assert paid == bond
+    assert ctx.chain.sent[-1] == (AGENT.lower(), bond)
+    assert ctx.claimable(AGENT) == 0
+
+
+def test_expanding_review_slashes_a_nonzero_bond_to_both_parties_and_claims(ctx):
+    """EXPANDS_AUTHORITY slashes a nonzero bond: fee to treasury, rest to grantor.
+
+    Both credited parties then drain their balances with claim(), which must
+    zero the ledger and emit exactly one transfer each.
+    """
+    root = make_root(ctx)
+    child = propose(ctx, root)
+    bond = 10**16
+    review(ctx, child, EXPANDS, bond=bond)
+    fee = bond * 1000 // 10000
+    holder_share = bond - fee
+    assert ctx.claimable(AGENT) == 0
+    assert ctx.claimable(BOSS) == holder_share
+    assert ctx.claimable(TREASURY) == fee
+    assert holder_share + fee == bond
+
+    ctx.as_(BOSS)
+    assert ctx.c.claim() == holder_share
+    assert ctx.chain.sent[-1] == (BOSS.lower(), holder_share)
+    assert ctx.claimable(BOSS) == 0
+
+    ctx.as_(TREASURY)
+    assert ctx.c.claim() == fee
+    assert ctx.chain.sent[-1] == (TREASURY.lower(), fee)
+    assert ctx.claimable(TREASURY) == 0
+
+
+def test_out_of_scope_use_slashes_a_nonzero_bond_and_claims(ctx):
+    """OUT_OF_SCOPE slashes a nonzero use bond to the grantor, then claim() pays."""
+    _, child = active_child(ctx)
+    ctx.nondet.web[EV] = (200, b"<html>Office furniture, $4000</html>")
+    ctx.answer(OUTSIDE)
+    before = ctx.claimable(AGENT)  # active_child refunded the review bond
+    bond = 4 * 10**15
+    ctx.as_(SUB, value=bond)
+    uid = ctx.c.prove_use(child, "Bought office furniture", [EV])
+    assert ctx.use(uid)["decision"] == OUT_OF_SCOPE
+    fee = bond * 1000 // 10000
+    assert ctx.claimable(SUB) == 0
+    assert ctx.claimable(AGENT) - before == bond - fee
+    assert ctx.claimable(TREASURY) == fee
+
+    ctx.as_(AGENT)
+    paid = ctx.c.claim()
+    assert paid == before + (bond - fee)
+    assert ctx.chain.sent[-1] == (AGENT.lower(), paid)
+    assert ctx.claimable(AGENT) == 0
+
+
+def test_wrong_challenge_slashes_a_nonzero_bond_and_the_holder_claims(ctx):
+    root = make_root(ctx)
+    child = propose(ctx, root)
+    review(ctx, child, NARROWER)
+    ctx.answer(NARROWER)
+    bond = 2 * 10**16
+    ctx.as_(OUTSIDER, value=bond)
+    ctx.c.challenge(child)
+    fee = bond * 1000 // 10000
+    assert ctx.claimable(OUTSIDER) == 0
+    assert ctx.claimable(SUB) == bond - fee
+    assert ctx.claimable(TREASURY) == fee
+
+    ctx.as_(SUB)
+    assert ctx.c.claim() == bond - fee
+    assert ctx.chain.sent[-1] == (SUB.lower(), bond - fee)
+    assert ctx.claimable(SUB) == 0
 
 
 def test_config_is_readable(ctx):

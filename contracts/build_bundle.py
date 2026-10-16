@@ -7,9 +7,11 @@ re-emitted as byte one of the output with nothing above it.
 """
 
 import ast
+import io
 import pathlib
 import re
 import sys
+import tokenize
 
 ROOT = pathlib.Path(__file__).resolve().parent
 OUT = ROOT / "build" / "Cord.bundled.py"
@@ -58,8 +60,7 @@ def strip_docstrings(source):
     Bradbury has an empirical deploy-size wall a little above 50KB of encoded
     payload, and CORD is documented heavily on purpose. Docstrings are stripped
     from the generated bundle so the source stays readable without spending
-    the deploy budget on prose. Comments are left alone: they are cheap and a
-    reviewer reads the bundle too.
+    the deploy budget on prose.
 
     Rewriting is done through the AST, so this can never alter a string that is
     actually used — only expression-statement docstrings are dropped.
@@ -98,6 +99,32 @@ def strip_docstrings(source):
     return result
 
 
+def strip_comments(source):
+    """Remove comments from the deployable file only.
+
+    The source keeps every comment; the generated bundle does not. Comments are
+    the single largest non-functional cost in a file this heavily annotated, and
+    the deploy-size budget is real (`TRIM_TRIGGER` in tests/test_bundle.py is
+    the guard). This walks real tokenizer COMMENT tokens, so a `#` inside a
+    string literal or a format spec is never touched, and line structure is
+    preserved so the AST-based docstring pass that runs next sees the same
+    line numbers.
+    """
+    comment_cols = {}
+    for tok in tokenize.generate_tokens(io.StringIO(source).readline):
+        if tok.type == tokenize.COMMENT:
+            comment_cols.setdefault(tok.start[0], tok.start[1])
+
+    out = []
+    for i, line in enumerate(source.splitlines(), 1):
+        if i in comment_cols:
+            line = line[: comment_cols[i]].rstrip()
+        out.append(line)
+    result = "\n".join(out) + ("\n" if source.endswith("\n") else "")
+    compile(result, "<stripped>", "exec")
+    return result
+
+
 def main():
     contract = (ROOT / "Cord.py").read_text(encoding="utf-8")
     if BEGIN not in contract or END not in contract:
@@ -122,12 +149,15 @@ def main():
     end = contract.index(END) + len(END)
     bundled = contract[:start] + inlined + contract[end:]
 
-    # The runner directive must be the very first bytes of the file.
+    # The runner directive must be the very first bytes of the file. Strip the
+    # generated body first — comments, then docstrings — and prepend the
+    # directive last, so neither pass can reach it.
     lines = bundled.splitlines()
     lines = [ln for ln in lines if not ln.startswith('# { "Depends"')]
-    bundled = DEPENDS + "\n" + "\n".join(lines).lstrip("\n") + "\n"
+    body = "\n".join(lines).lstrip("\n") + "\n"
 
-    bundled = strip_docstrings(bundled)
+    body = strip_docstrings(strip_comments(body))
+    bundled = DEPENDS + "\n" + body
 
     OUT.parent.mkdir(parents=True, exist_ok=True)
     # newline="" disables platform newline translation. Without it, Windows

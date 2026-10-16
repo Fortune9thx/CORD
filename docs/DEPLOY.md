@@ -76,6 +76,29 @@ and its distribution has a different shape.
 --fee-value 100000000000010352
 ```
 
+### Driving payable calls (a real bond) from a script
+
+The CLI cannot attach `msg.value` to a call, so a nonzero bond cannot be posted
+from it. Use `genlayer-py`'s `write_contract`, which takes `value` and an explicit
+`account` (a local key), and pass the same `distribution` above as `fees` with a
+`feeValue`:
+
+```python
+from eth_account import Account
+from genlayer_py import create_client
+from genlayer_py.chains import studio_devnet
+
+acct = Account.from_key(KEY)                       # funded from the deployer
+c = create_client(chain=studio_devnet, endpoint=RPC, account=acct)
+c.write_contract(address=ADDR, function_name="request_review",
+                 args=["g2"], account=acct, value=10**16, fees=FEES)
+```
+
+`estimate_transaction_fees_for_write(...)` returns a Studio-derived `fees` object
+that includes the `messageAllocations` a payout needs. Even so, on this network
+build a `claim()` value transfer is skipped and refunded — the emitted message
+declares a fee budget of `0`. See `docs/STATUS.md`.
+
 ---
 
 ## 4. Deploy

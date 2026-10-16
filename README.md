@@ -59,11 +59,21 @@ May differ freely: reasoning text, raw model output. A verdict is also forced
 into consistency with its own evidence before comparison: a model that answers
 `NARROWER_OR_EQUAL` while naming expanding clauses is read as
 `EXPANDS_AUTHORITY`, and one that answers `EXPANDS_AUTHORITY` while naming
-nothing is read as `AMBIGUOUS`.
+nothing is read as `AMBIGUOUS`. A verdict also fails closed against its own
+prohibition-coverage flag: `NARROWER_OR_EQUAL` with `prohibitions_covered: false`
+is read as `AMBIGUOUS`, so a child can only activate when the review explicitly
+confirmed the parent's prohibitions survived. One structured subset check that
+still widens authority is refused by that rule even when the prose review agrees
+with the caller.
 
-*prove_use* — must match: the decision, and the set of clause ids said to be
-violated. An `OUT_OF_SCOPE` that names no violated clause is read as
-`INCONCLUSIVE`, so no bond is slashed on an unsupported accusation.
+*prove_use* — must match: the decision, the set of clause ids said to be
+violated, and a deterministic evidence-availability flag. An `OUT_OF_SCOPE` that
+names no violated clause is read as `INCONCLUSIVE`, so no bond is slashed on an
+unsupported accusation. Separately, every validator computes whether **every**
+submitted evidence URL was actually fetched and returned a non-empty body; a
+substantive `WITHIN_SCOPE`/`OUT_OF_SCOPE` is downgraded to `INCONCLUSIVE` unless
+that flag is true on both sides. A missing or empty evidence body can never
+become approval.
 
 Validators re-derive everything from **stored** parent and child text. No verdict
 is ever accepted from a caller.
@@ -76,7 +86,7 @@ is ever accepted from a caller.
 |---|---|
 | RPC | `https://studio-dev.genlayer.com/api` |
 | Explorer | `https://explorer-studio-dev.genlayer.com` |
-| Contract | [`0x0dE4f140aD4Df0D3d24D645A86d4fd8B5769204d`](https://explorer-studio-dev.genlayer.com/address/0x0dE4f140aD4Df0D3d24D645A86d4fd8B5769204d) |
+| Contract | [`0x4e976D69483d4d1f8bb17dF23E2137436881A307`](https://explorer-studio-dev.genlayer.com/address/0x4e976D69483d4d1f8bb17dF23E2137436881A307) |
 | Runner | `py-genlayer:5jycge4q8k23462jtb0b9fyey1s9qz928sz2nbrd9mg4sxqg2qng` |
 
 The frontend reads `VITE_CONTRACT_ADDRESS` and shows an explicit banner for
@@ -130,7 +140,7 @@ MIT — see [LICENSE](LICENSE). Security policy: [SECURITY.md](SECURITY.md).
 ## Deployment
 
 Live on GenLayer Studio Dev (chain 61997) at
-[`0x0dE4f140aD4Df0D3d24D645A86d4fd8B5769204d`](https://explorer-studio-dev.genlayer.com/address/0x0dE4f140aD4Df0D3d24D645A86d4fd8B5769204d).
+[`0x4e976D69483d4d1f8bb17dF23E2137436881A307`](https://explorer-studio-dev.genlayer.com/address/0x4e976D69483d4d1f8bb17dF23E2137436881A307).
 
 The address, deploy transaction, constructor arguments and the sha256 of the
 exact deployed bundle are recorded in

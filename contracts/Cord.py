@@ -37,6 +37,7 @@ from genlayer.types import *
 # --- cordlib (inlined by contracts/build_bundle.py for deployment) ---------
 from cordlib.core import *
 from cordlib.judgment import (
+    all_evidence_available,
     build_review_prompt,
     build_use_prompt,
     normalize_action,
@@ -561,7 +562,9 @@ class Cord(gl.contract.Contract):
 
         Each validator fetches the evidence itself; the leader's fetched bytes
         are never trusted as the record. A fetch failure yields INCONCLUSIVE,
-        never approval.
+        never approval. A deterministic gate enforces the same rule on every
+        side: unless every submitted URL was fetched and returned a non-empty
+        body, a substantive verdict is downgraded to INCONCLUSIVE.
         """
         grant = self._load(grant_id)
         if grant is None:
@@ -606,6 +609,7 @@ class Cord(gl.contract.Contract):
             "action": act,
             "evidence_urls": urls,
             "decision": decision,
+            "evidence_ok": bool(result.get("evidence_ok", False)),
             "violated_clause_ids": result["violated_ids"],
             "bond": bond,
             "slashed": settlement["slashed"],
@@ -683,7 +687,10 @@ class Cord(gl.contract.Contract):
         """Run the PROVE_USE judgment under validator consensus.
 
         Each side fetches the evidence independently — the leader's bytes are
-        an input to its own opinion only.
+        an input to its own opinion only. Every side also computes a
+        deterministic evidence-availability flag and carries it inside the
+        comparable, so consensus covers "the evidence was actually readable"
+        before any substantive verdict is accepted.
         """
 
         def judge() -> str:
@@ -705,11 +712,20 @@ class Cord(gl.contract.Contract):
             raw = gl.nondet.exec_prompt(
                 build_use_prompt(grant, action, evidence), response_format="json"
             )
-            return json.dumps(use_comparable(_safe_json(raw)), sort_keys=True)
+            projected = use_comparable(_safe_json(raw))
+            # Deterministic, derived from this side's own fetches. It rides in
+            # the comparable so validators must agree the evidence was readable
+            # before any WITHIN_SCOPE / OUT_OF_SCOPE verdict is accepted.
+            projected["evidence_ok"] = all_evidence_available(evidence)
+            return json.dumps(projected, sort_keys=True)
 
         try:
             agreed = gl.eq_principle.strict_eq(judge)
-            return _parse_agreed(agreed, _INCONCLUSIVE_RESULT)
+            result = _parse_agreed(agreed, _INCONCLUSIVE_RESULT)
+            # Applied after consensus: even when every side agreed on a
+            # substantive verdict, missing or empty evidence forces
+            # INCONCLUSIVE. A failed fetch is never approval.
+            return gate_use_by_evidence(result, bool(result.get("evidence_ok", False)))
         except Exception:
             return dict(_INCONCLUSIVE_RESULT)
 

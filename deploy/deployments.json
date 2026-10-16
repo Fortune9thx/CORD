@@ -8,11 +8,14 @@
   "runner": "py-genlayer:5jycge4q8k23462jtb0b9fyey1s9qz928sz2nbrd9mg4sxqg2qng",
   "contract": {
     "name": "Cord",
-    "address": "0x0dE4f140aD4Df0D3d24D645A86d4fd8B5769204d",
-    "deployTx": "0xafac0b6aadd7e4b5f3764ce932d0f0dec915f40c96f27ebe36d1c508c2890093",
-    "consensusStatus": "ACCEPTED",
-    "bundleBytes": 51116,
-    "bundleSha256": "5a10ed5ec31ffec6aa4677dada4c6118e84831654a1019b029723fbd1324185f",
+    "address": "0x4e976D69483d4d1f8bb17dF23E2137436881A307",
+    "deployTx": "0x7668d9ea87ec4ce6df2156c573d0009e07c8a101ce85df985e621b6bda669f66",
+    "consensusStatus": "FINALIZED",
+    "consensusResult": "MAJORITY_AGREE",
+    "leaderExecution": "SUCCESS",
+    "methodCount": 19,
+    "bundleBytes": 44323,
+    "bundleSha256": "993abdd255d6e3a074c4dd0c1697ca442b7cf84f3bf79a8e3cabadbda178963a",
     "constructor": {
       "treasury": "0xc6e6d3b2accaececeb40ad4bd3df123ddcb4e537",
       "review_bond": "10000000000000000",
@@ -21,76 +24,117 @@
       "fee_bps": 1000
     }
   },
-  "judgmentDemonstration": {
-    "address": "0x3d1dDc824E305D8e4547b27c5FfCc1925c1f0c9e",
-    "why": "Identical code, deployed with all three bonds set to zero. The genlayer CLI has no flag for attaching GEN to a call, so the payable entry points cannot be exercised from it at all. A zero-bond instance runs the same judgments and the same settlement code with nothing at stake, which is what makes the verdicts below reachable without a browser wallet.",
-    "provesVerdictsNotSlashes": "An adverse verdict and the slash it implies are different milestones. These runs prove the verdicts. No GEN has moved through a bond yet."
+  "stewardFix": {
+    "reviewFailsClosed": "review_comparable() now forces AMBIGUOUS when the agreed verdict is NARROWER_OR_EQUAL but prohibitions_covered is false. A child can only activate when the review explicitly confirmed the parent's prohibitions survived; a model that waves a widening child through while admitting the prohibitions were not covered can no longer activate it.",
+    "evidenceGate": "judgment.all_evidence_available() decides, deterministically, whether every submitted evidence URL was fetched and returned a non-empty body. It rides inside the strict_eq comparable as evidence_ok and is re-applied after consensus by core.gate_use_by_evidence(), so a substantive WITHIN_SCOPE/OUT_OF_SCOPE is downgraded to INCONCLUSIVE unless every side agrees the evidence was readable. A failed fetch is never approval.",
+    "useRecord": "prove_use records now carry evidence_ok, so the UI and any auditor can see whether a verdict rested on readable evidence.",
+    "ci": "genvm-lint check is now a blocking CI gate (GENVM_VERSION pinned), not continue-on-error."
   },
   "liveVerification": [
     {
-      "check": "gen_getContractSchema returns all 19 methods",
+      "check": "gen_getContractSchema returns all 19 methods on the deployed address",
       "result": "pass"
     },
     {
       "check": "get_config reads back the constructor state",
-      "result": "pass"
+      "result": "review_bond 10000000000000000, challenge_bond 20000000000000000, use_bond 0, fee_bps 1000, owner/treasury 0xc6e6..."
     },
     {
-      "check": "create_root writes a grant with a real chain timestamp",
-      "result": "pass"
+      "check": "create_root writes an ACTIVE root grant with a real chain timestamp",
+      "tx": "0xa371ad859692ef31064e99bef782045bde9f19cd4db54dc583581e13071aab0c",
+      "result": "g1 ACTIVE, depth 0"
     },
     {
-      "check": "SEMANTIC REVIEW, honest narrower child",
-      "result": "NARROWER_OR_EQUAL",
-      "detail": "expansion_clause_ids [], prohibitions_covered true, grant PROPOSED -> ACTIVE"
+      "check": "propose_child proposes a child that keeps a strict subset of the structured scope but widens it in prose",
+      "tx": "0x4f5118ee8e4b11ceb6e2b552ffb8410c5a3f7037fba365641f50d716b579805f",
+      "result": "g2 PROPOSED"
     },
     {
-      "check": "SEMANTIC REVIEW, child that widens its parent in prose",
+      "check": "SEMANTIC REVIEW settles that child",
+      "tx": "0x3c7c51d72db294ae4a879b560583ce64e8980fc87a4f2e1f66eb4c6995942876",
       "result": "EXPANDS_AUTHORITY",
-      "detail": "expansion_clause_ids [c0, c1] -- consensus independently named both offending clauses -- prohibitions_covered false, grant PROPOSED -> DENIED. The same field is empty for the honest case, so the adjudicator discriminates rather than approving everything."
+      "detail": "expansion_clause_ids [c0, c1], prohibitions_covered false, slashed 10000000000000000, grant PROPOSED -> DENIED"
     },
     {
-      "check": "PROVE_USE against a real fetched page",
-      "result": "WITHIN_SCOPE",
-      "detail": "validators independently fetched https://example.com/ and judged the action"
+      "check": "can_invoke on the DENIED child fails closed",
+      "result": "denied: grant status is denied"
     },
     {
-      "check": "deterministic gate rejects objective widening before any validator runs",
-      "result": "reverted: structural widening rejected: capability not covered by parent: admin",
-      "detail": "eq_outputs was {} -- zero non-deterministic calls were made"
+      "check": "PROVE_USE with a real, readable evidence page",
+      "tx": "0x89952fdd0d7a332141484127b450487d72032858c963959d693306dad26807fd",
+      "result": "INCONCLUSIVE",
+      "detail": "u4: evidence_ok true (https://example.com/ fetched), decision INCONCLUSIVE -- the unrelated page does not establish the action. Readable evidence is necessary, not sufficient."
     },
     {
-      "check": "can_invoke on an active child",
-      "result": "allowed"
-    },
-    {
-      "check": "can_invoke on that same child after revoking its ROOT",
-      "result": "denied: ancestor g1: grant status is revoked",
-      "detail": "the child's own status is still ACTIVE; the walk to the root is what denies it, and it names the ancestor"
-    },
-    {
-      "check": "OUT_OF_SCOPE prove_use taints a grant; can_invoke denies while status stays ACTIVE",
-      "result": "pass",
-      "detail": "claimed a deletion the clause forbade, evidence was an unrelated public page; violated_clause_ids named c0 correctly"
-    },
-    {
-      "check": "clear_taint lifts the taint and can_invoke is allowed again",
-      "result": "pass"
-    },
-    {
-      "check": "revise_child on a DENIED proposal: version bumps, status returns to PROPOSED, re-review settles NARROWER_OR_EQUAL",
-      "result": "pass",
-      "detail": "full AMBIGUOUS/DENIED escape-hatch cycle proven: DENIED -> revise_child -> PROPOSED v2 -> re-review -> ACTIVE"
-    },
-    {
-      "check": "challenge on an ACTIVE grant: re-review still NARROWER_OR_EQUAL, upheld false, challenger bond refunded, grant stays ACTIVE",
-      "result": "pass"
+      "check": "PROVE_USE with an unreachable evidence URL",
+      "tx": "0x6827325614070eec59b3e0980c0a1a71308c037031a361f6da8566e590ce4c35",
+      "result": "INCONCLUSIVE",
+      "detail": "u5: evidence_ok false (https://no-such-host.invalid/evidence did not resolve), decision INCONCLUSIVE. The deterministic evidence flag is computed and exposed live."
     }
   ],
+  "bondLifecycle": {
+    "summary": "A real, nonzero GEN bond was posted, an adverse verdict slashed it, and the contract credited the split to the parent's grantor and the treasury -- all on chain. claim() then executed and zeroed the ledger, but the platform skipped and refunded the outgoing value transfer, so no GEN has actually left the contract. See externalPayout below.",
+    "participants": {
+      "grantor": "0x1C2392De725EEBe4362e76229e65F440EB3CBf30",
+      "grantee": "0xA05e76f26F0c09ffC83c5CE6469cFd746b541FaB",
+      "treasury": "0xc6e6d3b2accaececeb40ad4bd3df123ddcb4e537",
+      "funding": [
+        "0x760ccc2eecb644ce88de89f92258aea8461620d8dc70ed0c207b9070270315a2 (2 GEN to grantor)",
+        "0x573f6dab53c687f0aca048fd158bb1fb2d5065ed017e4a8bdebe11fbfea14a6d (2 GEN to grantee)"
+      ]
+    },
+    "steps": [
+      {
+        "action": "request_review g2 with value 10000000000000000 (0.01 GEN), sent by the child's grantor",
+        "tx": "0x3c7c51d72db294ae4a879b560583ce64e8980fc87a4f2e1f66eb4c6995942876",
+        "result": "bond accepted (msg.value attached), verdict EXPANDS_AUTHORITY, full bond slashed"
+      },
+      {
+        "action": "get_claimable after the slash",
+        "result": "grantor 9000000000000000 (0.009 GEN), treasury 1000000000000000 (0.001 GEN) -- a real 90/10 split of a nonzero bond"
+      },
+      {
+        "action": "request_review g3 with value 10000000000000000 (0.01 GEN)",
+        "tx": "0x188ae8a22ca8f8ad44f916bdc99e25de0ab0c634791e72ab9ec7e8e379b3c308",
+        "result": "EXPANDS_AUTHORITY, slashed; treasury claimable rises to 2000000000000000 (0.002 GEN)"
+      },
+      {
+        "action": "contract balance while both bonds are held and before any payout",
+        "result": "20000000000000000 (0.02 GEN) -- the contract really custodies the posted bonds"
+      }
+    ]
+  },
+  "externalPayout": {
+    "status": "NOT delivered on Studio Dev -- value transfer skipped and refunded by the platform",
+    "claimCalls": [
+      {
+        "tx": "0x572104fc7942e236a14297d45ff65def38ed6692a073a18b692f28857e84eaa9",
+        "fees": "no message allocation (the CLI-style fee distribution only)",
+        "result": "claim() executed SUCCESS and zeroed the ledger, but the emitted transfer was skipped: message_value_effects declaredBudget 0, skipped true, skippedRefunded true"
+      },
+      {
+        "tx": "0x678fa8c7ad3c68c60a7e4a4140c587f8b27ad439ce2bf89a1ac06a7fc15a05a0",
+        "fees": "Studio sim_estimateTransactionFees messageAllocations (messageType internal, recipient grantor, budget 120000000000010352)",
+        "result": "FINALIZED, leader execution SUCCESS, yet message_value_effects for the emitted value still shows declaredBudget 0, skipped true, skippedRefundedAmount 9000000000000000. The message fee budget was refunded, the value stayed in the contract."
+      }
+    ],
+    "effect": "After both claims the contract balance is 20000000000000000 (0.02 GEN) and neither participant's EOA balance rose by the slashed amount. The 0.009 GEN credited to the grantor's internal ledger is real state, but the pull-payment emit_transfer does not deliver value on this network build.",
+    "why": "gl.chain.Account(...).emit_transfer() emits the value message with its own fee budget of 0. On Studio Dev that message is skipped and its value refunded inside the contract; the fee deposit attached at submission (even a Studio-estimated messageAllocations entry) does not change the emitted message's declared budget. This is the platform-level reason the prior session could not prove a payout, now pinned to a specific receipt field rather than to a missing CLI flag.",
+    "conclusion": "The bond/slash/credit lifecycle is proven live. The external payout is not: no GEN left the contract. claim() logic, ledger zeroing and the pull-payment shape are exercised, but the value delivery is blocked by the platform."
+  },
   "notProvenLive": [
-    "Real fund movement above zero. claim() is the only path that moves GEN out, via gl.chain.Account(...).emit_transfer. The CLI cannot attach value to a payable call, so posting a real nonzero bond needs a browser wallet or a raw signing key. Every other write method -- create_root, propose_child, revise_child, revoke, request_review, challenge, prove_use, clear_taint -- has now been exercised live on chain (see liveVerification above), on a zero-bond twin deployment so the judgment and settlement code runs for real with nothing at stake."
+    "External value delivery (GEN actually leaving the contract). See externalPayout.",
+    "The fail-closed review rule (NARROWER_OR_EQUAL over prohibitions_covered=false -> AMBIGUOUS) and the evidence-gate downgrade are proven by the test suite, not by a live adverse-verdict run: forcing a model to return exactly those contradictory shapes on demand is not reproducible on chain. Their plumbing is visible live (prohibitions_covered is read back; evidence_ok is computed true/false), but the specific downgrades were not triggered on chain."
+  ],
+  "previousDeployments": [
+    {
+      "address": "0x0dE4f140aD4Df0D3d24D645A86d4fd8B5769204d",
+      "note": "Pre-steward-fix code. The full nine-write surface and both judgments were exercised here and on a zero-bond twin (0x3d1dDc824E305D8e4547b27c5FfCc1925c1f0c9e); that record is in git history."
+    }
   ],
   "notes": [
-    "eth_getCode returns 0x for a live GenLayer contract -- verified against a known-live address. Liveness is probed with gen_getContractSchema."
+    "eth_getCode returns 0x for a live GenLayer contract -- verified against a known-live address. Liveness is probed with gen_getContractSchema.",
+    "Writes were driven with genlayer-py write_contract(value=...), which attaches msg.value and a fee deposit; that is what made a real nonzero bond reachable without a browser wallet.",
+    "Studio Dev state may reset. An address that was live can stop resolving."
   ]
 }
