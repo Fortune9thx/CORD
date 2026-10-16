@@ -15,8 +15,13 @@ jobs:
         with:
           python-version: "3.11"
 
+      # genvm-linter is pinned for the same reason as the runner below: the
+      # latest stable (0.11.0) still reads runner bundles from the pre-split
+      # genlayerlabs/genvm repository, where the v0.6.0-rc* tags do not exist,
+      # so every download 404s. 0.11.1rc2 reads genlayerlabs/genvm-manager,
+      # which is where those bundles live.
       - name: Install tooling
-        run: pip install pytest "ruff==0.16.9" genvm-linter
+        run: pip install pytest "ruff==0.16.9" "genvm-linter==0.11.1rc2"
 
       - name: Lint
         run: ruff check contracts tests

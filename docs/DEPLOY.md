@@ -10,13 +10,18 @@ including the sha256 of the exact bundle that was deployed.
 ## 1. Build and check locally
 
 ```powershell
-pip install pytest "ruff==0.16.9"
+pip install pytest "ruff==0.16.9" "genvm-linter==0.11.1rc2"
 python contracts\build_bundle.py
 python -m pytest tests\ -q
 python -m ruff check contracts tests
 $env:PYTHONIOENCODING = "utf-8"
 genvm-lint contracts\build\Cord.bundled.py
 ```
+
+`genvm-linter` is pinned: the latest stable (0.11.0) still resolves runner
+bundles from the pre-split `genlayerlabs/genvm` repository, where the
+`v0.6.0-rc*` tags do not exist and every download 404s. `0.11.1rc2` reads
+`genlayerlabs/genvm-manager`, which is where they live.
 
 `contracts/build/Cord.bundled.py` is generated. Edit `contracts/Cord.py` or
 `contracts/cordlib/*.py` and rebuild; CI fails on a stale bundle.
