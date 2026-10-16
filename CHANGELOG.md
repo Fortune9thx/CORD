@@ -25,7 +25,9 @@ Redeployed on GenLayer Studio Dev (chain 61997) at
   `v0.6.0-rc*` tags do not exist and every download 404s. The runner is pinned
   to `v0.6.0-rc8`. The rc9 asset was later republished to rc10's content, which
   dropped the contract's `py-genlayer:5jycge4q...` runner, so rc8 is the newest
-  bundle that still ships it.
+  bundle that still ships it. CI runs Python 3.12: the runner's
+  `py-lib-genlayer-std` uses PEP 695 generics (`def inmem_allocate[T]`) that
+  3.11 cannot parse.
 - Frontend: a non-activating `prohibitions_covered: false` review and an
   `evidence_ok: false` use are shown explicitly rather than as ordinary states.
 

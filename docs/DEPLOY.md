@@ -32,6 +32,10 @@ digest: rc6, rc7 and rc8 are all `bd30580f...`, which carries the pin; the rc9
 asset was later republished to rc10's content (`d3c6ba36...`), which dropped it.
 So rc8 is the newest bundle that still ships the SDK the contract declares.
 
+Python **3.12+** is required. The runner's `py-lib-genlayer-std` uses PEP 695
+generics (`def inmem_allocate[T]` in `genlayer/storage/__init__.py`), which
+3.11 cannot parse; CI pins 3.12 for the same reason.
+
 `contracts/build/Cord.bundled.py` is generated. Edit `contracts/Cord.py` or
 `contracts/cordlib/*.py` and rebuild; CI fails on a stale bundle.
 
