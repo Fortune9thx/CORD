@@ -125,6 +125,28 @@ def _guard(fn):
         _err(str(e))
 
 
+@gl.evm.contract_interface
+class _EoaRecipient:
+    """A typed handle for an account on the chain layer.
+
+    Payouts must travel as *external* messages. `gl.chain.Account(...)
+    .emit_transfer` emits an internal message, and an internal message that
+    carries value to an EOA is not delivered: the runner records the transfer
+    with `declaredBudget: 0` and refunds the value on finalization (`skipped:
+    true, skippedRefunded: true`), so `claim()` looked successful while the
+    recipient's balance never moved. Emitting through an EVM interface is the
+    documented way to move GEN from an intelligent contract to an EOA, and the
+    write that triggers it must carry the fee estimate's `messageAllocations`
+    so the external message has a non-zero budget.
+    """
+
+    class View:
+        pass
+
+    class Write:
+        pass
+
+
 class Cord(gl.contract.Contract):
     # --- storage ----------------------------------------------------------
     owner: Address
@@ -640,14 +662,16 @@ class Cord(gl.contract.Contract):
         """Withdraw everything owed to the sender.
 
         Pull-only and zeroed before the transfer, so nothing is ever pushed to
-        an address that cannot receive it and no balance is double-spent.
+        an address that cannot receive it and no balance is double-spent. The
+        transfer is emitted as an external message (an EOA lives on the chain
+        layer); see `_EoaRecipient` for why the internal path silently refunds.
         """
         key = self._sender()
         amount = int(self.claimable.get(key, 0))
         if amount <= 0:
             _err("nothing to claim")
         self.claimable[key] = u256(0)
-        gl.chain.Account(gl.message.sender_address).emit_transfer(u256(amount))
+        _EoaRecipient(gl.message.sender_address).emit_transfer(value=u256(amount))
         return amount
 
     # ------------------------------------------------------------------

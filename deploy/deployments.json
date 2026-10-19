@@ -8,14 +8,14 @@
   "runner": "py-genlayer:5jycge4q8k23462jtb0b9fyey1s9qz928sz2nbrd9mg4sxqg2qng",
   "contract": {
     "name": "Cord",
-    "address": "0x4e976D69483d4d1f8bb17dF23E2137436881A307",
-    "deployTx": "0x7668d9ea87ec4ce6df2156c573d0009e07c8a101ce85df985e621b6bda669f66",
+    "address": "0xC05bfCbeaB47Bf9e934FBE459C2a853039f26E9D",
+    "deployTx": "0xda9071787f37a03b1c7113b7c6458141694d51cc3ef6c3a8b085d12d54286747",
     "consensusStatus": "FINALIZED",
     "consensusResult": "MAJORITY_AGREE",
     "leaderExecution": "SUCCESS",
     "methodCount": 19,
-    "bundleBytes": 44323,
-    "bundleSha256": "993abdd255d6e3a074c4dd0c1697ca442b7cf84f3bf79a8e3cabadbda178963a",
+    "bundleBytes": 44437,
+    "bundleSha256": "871a78eea72fb5bb6916b14f0e7c7bd72246e2b468fbc07a24b7644ec79eec41",
     "constructor": {
       "treasury": "0xc6e6d3b2accaececeb40ad4bd3df123ddcb4e537",
       "review_bond": "10000000000000000",
@@ -33,47 +33,55 @@
   "liveVerification": [
     {
       "check": "gen_getContractSchema returns all 19 methods on the deployed address",
+      "address": "0xC05bfCbeaB47Bf9e934FBE459C2a853039f26E9D",
       "result": "pass"
     },
     {
       "check": "get_config reads back the constructor state",
+      "address": "0xC05bfCbeaB47Bf9e934FBE459C2a853039f26E9D",
       "result": "review_bond 10000000000000000, challenge_bond 20000000000000000, use_bond 0, fee_bps 1000, owner/treasury 0xc6e6..."
     },
     {
       "check": "create_root writes an ACTIVE root grant with a real chain timestamp",
-      "tx": "0xa371ad859692ef31064e99bef782045bde9f19cd4db54dc583581e13071aab0c",
+      "address": "0xC05bfCbeaB47Bf9e934FBE459C2a853039f26E9D",
+      "tx": "0x5a83cd086311cad63a2909705ff6e08734288db5276b27fee13e9de9ad6380e4",
       "result": "g1 ACTIVE, depth 0"
     },
     {
       "check": "propose_child proposes a child that keeps a strict subset of the structured scope but widens it in prose",
-      "tx": "0x4f5118ee8e4b11ceb6e2b552ffb8410c5a3f7037fba365641f50d716b579805f",
+      "address": "0xC05bfCbeaB47Bf9e934FBE459C2a853039f26E9D",
+      "tx": "0x8e8590cd85d7d4bf56238029d3c3baa679728b5855a0b20a87dc261eec3fb9a7",
       "result": "g2 PROPOSED"
     },
     {
       "check": "SEMANTIC REVIEW settles that child",
-      "tx": "0x3c7c51d72db294ae4a879b560583ce64e8980fc87a4f2e1f66eb4c6995942876",
+      "address": "0xC05bfCbeaB47Bf9e934FBE459C2a853039f26E9D",
+      "tx": "0xd9dc295c46fc841c7b4385f376ccd9182f1afea5a3bbaf16ee397b939769a672",
       "result": "EXPANDS_AUTHORITY",
       "detail": "expansion_clause_ids [c0, c1], prohibitions_covered false, slashed 10000000000000000, grant PROPOSED -> DENIED"
     },
     {
       "check": "can_invoke on the DENIED child fails closed",
+      "address": "0xC05bfCbeaB47Bf9e934FBE459C2a853039f26E9D",
       "result": "denied: grant status is denied"
     },
     {
       "check": "PROVE_USE with a real, readable evidence page",
+      "address": "0x4e976D69483d4d1f8bb17dF23E2137436881A307",
       "tx": "0x89952fdd0d7a332141484127b450487d72032858c963959d693306dad26807fd",
       "result": "INCONCLUSIVE",
       "detail": "u4: evidence_ok true (https://example.com/ fetched), decision INCONCLUSIVE -- the unrelated page does not establish the action. Readable evidence is necessary, not sufficient."
     },
     {
       "check": "PROVE_USE with an unreachable evidence URL",
+      "address": "0x4e976D69483d4d1f8bb17dF23E2137436881A307",
       "tx": "0x6827325614070eec59b3e0980c0a1a71308c037031a361f6da8566e590ce4c35",
       "result": "INCONCLUSIVE",
       "detail": "u5: evidence_ok false (https://no-such-host.invalid/evidence did not resolve), decision INCONCLUSIVE. The deterministic evidence flag is computed and exposed live."
     }
   ],
   "bondLifecycle": {
-    "summary": "A real, nonzero GEN bond was posted, an adverse verdict slashed it, and the contract credited the split to the parent's grantor and the treasury -- all on chain. claim() then executed and zeroed the ledger, but the platform skipped and refunded the outgoing value transfer, so no GEN has actually left the contract. See externalPayout below.",
+    "summary": "A real, nonzero GEN bond was posted, an adverse verdict slashed it, the contract credited the split to the parent's grantor and the treasury, and claim() then delivered the grantor's credit to their EOA as an external message. For the first time the money actually left the contract.",
     "participants": {
       "grantor": "0x1C2392De725EEBe4362e76229e65F440EB3CBf30",
       "grantee": "0xA05e76f26F0c09ffC83c5CE6469cFd746b541FaB",
@@ -86,47 +94,46 @@
     "steps": [
       {
         "action": "request_review g2 with value 10000000000000000 (0.01 GEN), sent by the child's grantor",
-        "tx": "0x3c7c51d72db294ae4a879b560583ce64e8980fc87a4f2e1f66eb4c6995942876",
-        "result": "bond accepted (msg.value attached), verdict EXPANDS_AUTHORITY, full bond slashed"
+        "tx": "0xd9dc295c46fc841c7b4385f376ccd9182f1afea5a3bbaf16ee397b939769a672",
+        "result": "bond accepted (msg.value attached), verdict EXPANDS_AUTHORITY, full bond slashed; grant g2 PROPOSED -> DENIED"
       },
       {
         "action": "get_claimable after the slash",
         "result": "grantor 9000000000000000 (0.009 GEN), treasury 1000000000000000 (0.001 GEN) -- a real 90/10 split of a nonzero bond"
       },
       {
-        "action": "request_review g3 with value 10000000000000000 (0.01 GEN)",
-        "tx": "0x188ae8a22ca8f8ad44f916bdc99e25de0ab0c634791e72ab9ec7e8e379b3c308",
-        "result": "EXPANDS_AUTHORITY, slashed; treasury claimable rises to 2000000000000000 (0.002 GEN)"
+        "action": "claim(), sent by the grantor, with the Studio fee estimate's messageAllocations",
+        "tx": "0xf3f3876700f71ff0b6da4d7978b4a5d9e62eab2c79f682c985acb222801348e9",
+        "result": "MAJORITY_AGREE; the ledger zeroes and the 0.009 GEN is delivered to the grantor's EOA as an external message. Net balance change +8873695499999177 wei (the 0.009 GEN credit less the claim transaction's own fee)."
       },
       {
-        "action": "contract balance while both bonds are held and before any payout",
-        "result": "20000000000000000 (0.02 GEN) -- the contract really custodies the posted bonds"
+        "action": "contract balance after the payout",
+        "result": "1000000000000000 (0.001 GEN) -- only the treasury's 10% remains; the grantor's credit has left the contract"
       }
     ]
   },
   "externalPayout": {
-    "status": "NOT delivered on Studio Dev -- value transfer skipped and refunded by the platform",
+    "status": "DELIVERED on Studio Dev -- value transfer executed on finalization",
     "claimCalls": [
       {
-        "tx": "0x572104fc7942e236a14297d45ff65def38ed6692a073a18b692f28857e84eaa9",
-        "fees": "no message allocation (the CLI-style fee distribution only)",
-        "result": "claim() executed SUCCESS and zeroed the ledger, but the emitted transfer was skipped: message_value_effects declaredBudget 0, skipped true, skippedRefunded true"
-      },
-      {
-        "tx": "0x678fa8c7ad3c68c60a7e4a4140c587f8b27ad439ce2bf89a1ac06a7fc15a05a0",
-        "fees": "Studio sim_estimateTransactionFees messageAllocations (messageType internal, recipient grantor, budget 120000000000010352)",
-        "result": "FINALIZED, leader execution SUCCESS, yet message_value_effects for the emitted value still shows declaredBudget 0, skipped true, skippedRefundedAmount 9000000000000000. The message fee budget was refunded, the value stayed in the contract."
+        "tx": "0xf3f3876700f71ff0b6da4d7978b4a5d9e62eab2c79f682c985acb222801348e9",
+        "fees": "Studio sim_estimateTransactionFees messageAllocations (messageType external, recipient grantor, budget 150000000000000)",
+        "result": "FINALIZED / MAJORITY_AGREE. Receipt: messages[0].messageType \"External\", message_value_effects[0x251a5c81...].phase \"finalized\" with no skipped/skippedRefunded, message_effect_delivered true, external_message_events[0].executionRecorded true. The grantor's EOA balance rose by the slashed amount."
       }
     ],
-    "effect": "After both claims the contract balance is 20000000000000000 (0.02 GEN) and neither participant's EOA balance rose by the slashed amount. The 0.009 GEN credited to the grantor's internal ledger is real state, but the pull-payment emit_transfer does not deliver value on this network build.",
-    "why": "gl.chain.Account(...).emit_transfer() emits the value message with its own fee budget of 0. On Studio Dev that message is skipped and its value refunded inside the contract; the fee deposit attached at submission (even a Studio-estimated messageAllocations entry) does not change the emitted message's declared budget. This is the platform-level reason the prior session could not prove a payout, now pinned to a specific receipt field rather than to a missing CLI flag.",
-    "conclusion": "The bond/slash/credit lifecycle is proven live. The external payout is not: no GEN left the contract. claim() logic, ledger zeroing and the pull-payment shape are exercised, but the value delivery is blocked by the platform."
+    "effect": "The grantor's EOA balance went from 1962009940749976244 to 1970883636249975421: +8873695499999177 wei net of the claim transaction's own fee, i.e. the full 9000000000000000 credit minus ~126304500000823 of execution/message fee. The contract balance dropped to 1000000000000000 (the treasury's share).",
+    "why": "gl.chain.Account(...).emit_transfer() emits an internal message; a value transfer to an EOA on an internal message is skipped and refunded on Studio Dev. The fix is to emit the payout as an external message through an EVM interface: @gl.evm.contract_interface on a typed handle, then _EoaRecipient(sender).emit_transfer(value=...). The triggering write must also carry the fee estimate's External messageAllocation so the message has a non-zero budget. Both are now in Cord.claim().",
+    "conclusion": "The bond/slash/credit lifecycle AND the external payout are both proven live. GEN genuinely left the contract and reached the participant's EOA, pinned to receipt fields and to the on-chain balance delta."
   },
   "notProvenLive": [
-    "External value delivery (GEN actually leaving the contract). See externalPayout.",
     "The fail-closed review rule (NARROWER_OR_EQUAL over prohibitions_covered=false -> AMBIGUOUS) and the evidence-gate downgrade are proven by the test suite, not by a live adverse-verdict run: forcing a model to return exactly those contradictory shapes on demand is not reproducible on chain. Their plumbing is visible live (prohibitions_covered is read back; evidence_ok is computed true/false), but the specific downgrades were not triggered on chain."
   ],
   "previousDeployments": [
+    {
+      "address": "0x4e976D69483d4d1f8bb17dF23E2137436881A307",
+      "deployTx": "0x7668d9ea87ec4ce6df2156c573d0009e07c8a101ce85df985e621b6bda669f66",
+      "note": "Internal-message payout path. Proven there: schema, get_config, create_root/propose_child/review, can_invoke fail-closed, both PROVE_USE evidence cases, and the bond/slash/credit split. Its claim() emitted an internal message and the platform refunded the value (message_value_effects skipped true / skippedRefunded true), which is what this deployment fixes."
+    },
     {
       "address": "0x0dE4f140aD4Df0D3d24D645A86d4fd8B5769204d",
       "note": "Pre-steward-fix code. The full nine-write surface and both judgments were exercised here and on a zero-bond twin (0x3d1dDc824E305D8e4547b27c5FfCc1925c1f0c9e); that record is in git history."

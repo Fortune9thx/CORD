@@ -62,10 +62,10 @@ validators *agree* on a self-contradictory review.
 | | |
 |---|---|
 | Network | GenLayer Studio Dev, chain 61997 |
-| Contract | `0x4e976D69483d4d1f8bb17dF23E2137436881A307` |
-| Deploy tx | `0x7668d9ea87ec4ce6df2156c573d0009e07c8a101ce85df985e621b6bda669f66` |
+| Contract | `0xC05bfCbeaB47Bf9e934FBE459C2a853039f26E9D` |
+| Deploy tx | `0xda9071787f37a03b1c7113b7c6458141694d51cc3ef6c3a8b085d12d54286747` |
 | Consensus | `FINALIZED` / `MAJORITY_AGREE`, leader execution `SUCCESS` |
-| Bundle | 44,323 bytes, sha256 in [`deploy/deployments.json`](../deploy/deployments.json) |
+| Bundle | 44,437 bytes, sha256 in [`deploy/deployments.json`](../deploy/deployments.json) |
 
 Run against the live contract, not a mock. Full record, including the
 transaction hashes, in [`deploy/deployments.json`](../deploy/deployments.json).
@@ -92,25 +92,28 @@ it, which is why the earlier record could not show this.
 parent's structured scope still reverts deterministically, before any validator
 runs — the property the whole design rests on.
 
-### What is not proven live
+**GEN really leaves the contract.** The bond credit is delivered, not just
+recorded. `claim()` emits the payout as an *external* message
+(`@gl.evm.contract_interface` + `emit_transfer`), the write carries the Studio
+fee estimate's External `messageAllocation`, and the grantor's on-chain EOA
+balance rises by the slashed amount. Claim tx
+`0xf3f3876700f71ff0b6da4d7978b4a5d9e62eab2c79f682c985acb222801348e9`: the
+receipt shows `messageType: "External"`, `message_value_effects[..].phase:
+"finalized"` with no `skipped`/`skippedRefunded`, `message_effect_delivered:
+true`, and `external_message_events[0].executionRecorded: true`. The grantor's
+balance went `1962009940749976244 → 1970883636249975421` (**+8,873,695,499,999,177
+wei** net of the claim's own fee), and the contract balance dropped to the
+treasury's 0.001 GEN share. The earlier internal-message path is recorded in
+[`deploy/deployments.json`](../deploy/deployments.json) as `previousDeployments`.
 
-**No GEN has actually left the contract.** `claim()` executes, returns success
-and zeroes the internal ledger, but the outgoing value transfer is skipped by the
-platform: the emitted message carries its own fee budget of `0`, so Studio Dev
-skips it and refunds the value inside the contract
-(`message_value_effects: {declaredBudget: 0, skipped: true, skippedRefunded: true}`).
-Attaching a Studio-estimated `messageAllocations` entry did not change this; the
-second claim finalized with `execution: SUCCESS` and the transfer was still
-skipped. After both claims the contract still held 0.02 GEN. The bond economics
-— a real nonzero credit — are now proven on chain; the *delivery* of that credit
-to an EOA is blocked by the platform, and that is where this record stops.
+### What is not proven live
 
 The two steward downgrades are proven by the test suite, not by a live trigger.
 Forcing a model to return exactly `NARROWER_OR_EQUAL` + `prohibitions_covered
 false`, or `WITHIN_SCOPE` over evidence it could not read, is not reproducible on
 demand. Their plumbing is visible live (`prohibitions_covered` reads back,
 `evidence_ok` is computed true and false), but the specific downgrades were not
-forced on chain.
+forced on chain. Nothing else is outstanding.
 
 
 ## Bonds

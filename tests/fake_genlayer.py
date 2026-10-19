@@ -238,8 +238,24 @@ def _make_modules():
     # evm
     evm_mod = types.ModuleType("genlayer.evm")
 
-    # chain.Account(addr).emit_transfer(value) is how value actually leaves a
-    # contract; there is no gl.evm.send_value.
+    # gl.evm.contract_interface builds a handle whose emit_transfer produces an
+    # *external* message. The harness records it into the same chain log so the
+    # payout assertions stay meaningful; the real difference is what matters:
+    # the internal path (gl.chain.Account) refunds a value transfer to an EOA,
+    # so Cord emits payouts through this interface instead.
+    def contract_interface(declaration):
+        class _Proxy:
+            def __init__(self, address):
+                self.address = address
+
+            def emit_transfer(self, value, *, on="finalized"):
+                chain.emit_transfer_from(self.address, value)
+
+        return _Proxy
+
+    evm_mod.contract_interface = contract_interface
+
+    # chain.Account(addr).emit_transfer(value) is the internal-message path.
     chain_mod = types.ModuleType("genlayer.chain")
 
     class _Account:

@@ -833,6 +833,16 @@ def _guard(fn):
         _err(str(e))
 
 
+@gl.evm.contract_interface
+class _EoaRecipient:
+
+    class View:
+        pass
+
+    class Write:
+        pass
+
+
 class Cord(gl.contract.Contract):
 
     owner: Address
@@ -1289,7 +1299,7 @@ class Cord(gl.contract.Contract):
         if amount <= 0:
             _err("nothing to claim")
         self.claimable[key] = u256(0)
-        gl.chain.Account(gl.message.sender_address).emit_transfer(u256(amount))
+        _EoaRecipient(gl.message.sender_address).emit_transfer(value=u256(amount))
         return amount
 
 

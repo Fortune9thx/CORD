@@ -2,6 +2,38 @@
 
 All notable changes to CORD. Dates are UTC.
 
+## [1.2.0] — 2026-10-19
+
+Redeployed on GenLayer Studio Dev (chain 61997) at
+`0xC05bfCbeaB47Bf9e934FBE459C2a853039f26E9D`. External payouts are now delivered
+for real.
+
+### Fixed — claim() delivers the payout
+
+- `claim()` emitted its value transfer through `gl.chain.Account(...)
+  .emit_transfer`, which produces an **internal** message. Studio Dev skips a
+  value transfer to an EOA carried on an internal message and refunds the value
+  to the contract (`message_value_effects: {declaredBudget: 0, skipped: true,
+  skippedRefunded: true}`), so the call looked successful while the recipient's
+  balance never moved. `claim()` now emits an **external** message through an EVM
+  interface: a typed `@gl.evm.contract_interface` handle,
+  `_EoaRecipient(sender).emit_transfer(value=...)`. The write that triggers it
+  carries the Studio fee estimate's External `messageAllocation` so the message
+  has a non-zero budget.
+- `tests/fake_genlayer.py` supplies `gl.evm.contract_interface` and records the
+  external transfer into the same chain log, keeping the payout assertions
+  meaningful.
+
+### Live
+
+- `claim()` tx
+  `0xf3f3876700f71ff0b6da4d7978b4a5d9e62eab2c79f682c985acb222801348e9`: receipt
+  shows `messageType: "External"`, `message_value_effects[..].phase:
+  "finalized"` with no `skipped`/`skippedRefunded`,
+  `message_effect_delivered: true`, and the grantor's EOA balance rose by
+  **8,873,695,499,999,177 wei** net of the claim's own fee. GEN has left the
+  contract. Bundle is now 44,437 bytes, sha256 `871a78ee…`.
+
 ## [1.1.0] — 2026-10-16
 
 Redeployed on GenLayer Studio Dev (chain 61997) at

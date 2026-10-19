@@ -8,10 +8,10 @@ transaction hashes, lives in [`deploy/deployments.json`](../deploy/deployments.j
 | | |
 |---|---|
 | Network | GenLayer Studio Dev, chain 61997 |
-| Contract | `0x4e976D69483d4d1f8bb17dF23E2137436881A307` |
-| Deploy tx | `0x7668d9ea87ec4ce6df2156c573d0009e07c8a101ce85df985e621b6bda669f66` |
+| Contract | `0xC05bfCbeaB47Bf9e934FBE459C2a853039f26E9D` |
+| Deploy tx | `0xda9071787f37a03b1c7113b7c6458141694d51cc3ef6c3a8b085d12d54286747` |
 | Consensus | `FINALIZED` / `MAJORITY_AGREE`, leader execution `SUCCESS` |
-| Bundle | 44,323 bytes, sha256 `993abdd2…` (in `deploy/deployments.json`) |
+| Bundle | 44,437 bytes, sha256 `871a78ee…` (in `deploy/deployments.json`) |
 
 ## Proven live (on the deployed contract)
 
@@ -24,8 +24,15 @@ transaction hashes, lives in [`deploy/deployments.json`](../deploy/deployments.j
   `can_invoke` denies it.
 - A **nonzero bond** (0.01 GEN) is posted with `msg.value`, slashed in full on
   that verdict, and credited **0.009 GEN to the parent's grantor, 0.001 GEN to
-  the treasury** (`get_claimable`). The contract custodied 0.02 GEN while both
-  bonds were posted.
+  the treasury** (`get_claimable`).
+- **External payout.** `claim()` now emits the value as an *external* message
+  (`@gl.evm.contract_interface` + `emit_transfer`). The receipt records
+  `messageType: "External"`, `message_value_effects[..].phase: "finalized"`
+  with no `skipped`/`skippedRefunded`, `message_effect_delivered: true`, and the
+  grantor's on-chain balance rises by **8,873,695,499,999,177 wei** net of the
+  transaction's own fee — the 0.009 GEN credit genuinely leaves the contract and
+  arrives in the EOA. This is the fix for the internal-message path, which
+  emitted `messageType: "Internal"` and had its value refunded.
 - PROVE_USE computes and stores `evidence_ok`: `true` for a readable page,
   `false` for a host that does not resolve, `INCONCLUSIVE` either way when the
   evidence does not establish the action.
@@ -42,13 +49,8 @@ transaction hashes, lives in [`deploy/deployments.json`](../deploy/deployments.j
 
 ## Not proven live
 
-- **External payout.** `claim()` executes and zeroes the ledger, but the
-  outgoing `emit_transfer` value is skipped and refunded by Studio Dev because
-  the emitted message declares a fee budget of `0`
-  (`message_value_effects: {declaredBudget: 0, skipped: true, skippedRefunded: true}`).
-  Attaching a Studio-estimated `messageAllocations` entry did not change it. No
-  GEN has left the contract. This is a platform behaviour, pinned to a specific
-  receipt field — not merely a missing CLI flag as the earlier record stated.
+- Nothing outstanding on the payout path. The earlier internal-message skip is
+  recorded in [`docs/APPEAL.md`](APPEAL.md) as the before/after the fix closes.
 
 ## Verify this repo
 
